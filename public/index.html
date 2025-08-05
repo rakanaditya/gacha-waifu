@@ -7,14 +7,97 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header>🎲 Gacha Waifu 🎲</header>
-  <button id="rollBtn" aria-label="Roll Gacha">Roll Gacha</button>
-  
-  <div id="result">
-    <div class="small">Klik "Roll Gacha" untuk mulai</div>
-  </div>
+  <nav class="nav">
+    <div class="nav-left">
+      <div class="brand">🎲 Gacha Waifu</div>
+      <ul class="nav-links" role="navigation" aria-label="Main navigation">
+        <li><button class="nav-btn active" data-target="home">Beranda</button></li>
+        <li><button class="nav-btn" data-target="about">About</button></li>
+      </ul>
+    </div>
+    <div class="nav-right">
+      <!-- Optional Google sign-in: placeholder -->
+      <button id="googleSignBtn" class="ghost">Login (Google)</button>
+    </div>
+  </nav>
 
-  <div class="rate-list" id="rateList"></div>
+  <main class="container">
+    <!-- HOME / GACHA -->
+    <section id="home" class="page">
+      <header class="page-header">
+        <h1>🎲 Gacha Waifu</h1>
+        <p class="subtitle">Klik tombol <strong>Roll Gacha</strong> atau tekan <kbd>R</kbd>.</p>
+      </header>
+
+      <div class="controls">
+        <button id="rollBtn" aria-label="Roll Gacha">Roll Gacha</button>
+        <button id="resetStatsLocal" class="ghost">Reset Stats</button>
+      </div>
+
+      <div id="result" class="result">
+        <div class="small">Klik "Roll Gacha" untuk mulai</div>
+      </div>
+
+      <div class="rate-list" id="rateList" aria-live="polite"></div>
+    </section>
+
+    <!-- ABOUT -->
+    <section id="about" class="page hidden">
+      <h2>About</h2>
+      <p>
+        Gacha Waifu — demo ringan gacha dengan statistik lokal, rarity label, confetti, dan sistem
+        komentar/rating. Dibuat oleh <strong>Rakan Aditya</strong>.
+      </p>
+      <h3>Fitur</h3>
+      <ul>
+        <li>Gacha berdasarkan bobot di <code>public/images.json</code></li>
+        <li>Normalized view (tampilan persentase riil)</li>
+        <li>Stats &amp; pity disimpan di <code>localStorage</code></li>
+        <li>Komentar &amp; rating (1–5) disimpan lokal; bisa dikoneksikan ke server jika perlu.</li>
+      </ul>
+      <h3>Google Login (opsional)</h3>
+      <p class="small">
+        Untuk mengaktifkan Google Sign-In, dapatkan <em>Client ID</em> dari Google Cloud Console
+        dan ubah logic pada <code>script.js</code> (ada stub). Tanpa itu, komentar bisa dikirim
+        anonim via localStorage.
+      </p>
+    </section>
+
+    <!-- COMMENTS & RATINGS (shared) -->
+    <aside class="comments-panel">
+      <h3>Komentar &amp; Rating</h3>
+      <form id="commentForm" class="comment-form" aria-label="Form komentar">
+        <div class="form-row">
+          <label for="nameInput">Nama (opsional)</label>
+          <input id="nameInput" placeholder="Anonim" />
+        </div>
+        <div class="form-row">
+          <label for="ratingInput">Rating</label>
+          <div id="ratingInput" class="star-input" role="radiogroup" aria-label="Rating bintang">
+            <button type="button" class="star" data-value="1" aria-label="1 bintang">☆</button>
+            <button type="button" class="star" data-value="2" aria-label="2 bintang">☆</button>
+            <button type="button" class="star" data-value="3" aria-label="3 bintang">☆</button>
+            <button type="button" class="star" data-value="4" aria-label="4 bintang">☆</button>
+            <button type="button" class="star" data-value="5" aria-label="5 bintang">☆</button>
+          </div>
+        </div>
+        <div class="form-row">
+          <label for="commentInput">Komentar</label>
+          <textarea id="commentInput" rows="3" placeholder="Tulis komentarmu..."></textarea>
+        </div>
+        <div class="form-row form-actions">
+          <label class="small"><input id="anonChk" type="checkbox" checked /> Kirim anonim</label>
+          <button id="sendComment" type="button">Kirim</button>
+        </div>
+      </form>
+
+      <div class="comments-list" id="commentsList" aria-live="polite"></div>
+    </aside>
+  </main>
+
+  <footer class="footer">
+    <div>© 2025 Gacha Waifu by Rakan Aditya</div>
+  </footer>
 
   <script src="script.js"></script>
 </body>
