@@ -238,7 +238,7 @@ function showRarityLabel(rarityObj) {
     label.style.flexDirection = 'column';
     label.style.alignItems = 'center';
     label.style.justifyContent = 'center';
-    resultDiv.insertBefore(label, resultDiv.firstChild);
+    resultDiv.appendChild(label);
   }
 
   // Build badge HTML (icon + text). Icon uses first letter of rarity for style.
