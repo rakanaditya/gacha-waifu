@@ -1,6 +1,4 @@
-// public/script.js (updated)
-// Keep this whole file content to replace old script.js
-
+// public/script.js (full — replace existing file)
 let waifus = [];
 let isRolling = false;
 
@@ -186,7 +184,65 @@ function playPopSound(intensity = 1) {
   osc.stop(now + 0.18);
 }
 
-/* -------------------- Data loading -------------------- */
+/* -------------------- Counters / localStorage stats -------------------- */
+const STORAGE_KEY = 'gacha_stats_v1';
+let counters = [];   // int array aligned with waifus
+let totalRolls = 0;
+
+function loadCounters(waifusLength) {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed.counters) && parsed.counters.length === waifusLength) {
+        counters = parsed.counters.map(n => Number(n) || 0);
+        totalRolls = Number(parsed.totalRolls) || counters.reduce((s, v) => s + v, 0);
+        return;
+      }
+    }
+  } catch (e) {
+    // ignore parse errors
+  }
+  counters = new Array(waifusLength).fill(0);
+  totalRolls = 0;
+  saveCounters();
+}
+
+function saveCounters() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ counters, totalRolls }));
+  } catch (e) {
+    console.warn('Could not save gacha stats to localStorage', e);
+  }
+}
+
+function resetCounters() {
+  counters = new Array(waifus.length).fill(0);
+  totalRolls = 0;
+  saveCounters();
+  updateCountersUI();
+}
+
+/* -------------------- Update counters UI (observed percents) -------------------- */
+function updateCountersUI() {
+  const totalEl = document.getElementById('totalPercent');
+  if (totalEl) {
+    const totalDefined = waifus.reduce((s, w) => s + (Number(w.percent) || 0), 0);
+    totalEl.textContent = `Total percent: ${totalDefined.toFixed(2)}% • Rolls: ${totalRolls}`;
+  }
+
+  waifus.forEach((w, idx) => {
+    const countEl = document.getElementById(`count-${idx}`);
+    const obsEl = document.getElementById(`observed-${idx}`);
+    if (countEl) countEl.textContent = String(counters[idx] || 0);
+    if (obsEl) {
+      const observedPct = totalRolls > 0 ? (100 * (Number(counters[idx] || 0) / totalRolls)) : 0;
+      obsEl.textContent = `${observedPct.toFixed(2)}%`;
+    }
+  });
+}
+
+/* -------------------- Data loading (with normalize UI & counters) -------------------- */
 async function loadData() {
   try {
     const res = await fetch('/images.json', { cache: "no-store" });
@@ -215,43 +271,61 @@ async function loadData() {
       };
     });
 
-    // build UI: total, normalize toggle, and rows showing both defined percent and actual chance
+    // init/load counters from localStorage
+    loadCounters(waifus.length);
+
+    // build UI: total, normalize toggle, reset stats button, and rows showing both defined percent and actual chance
     const list = document.getElementById("rateList");
     list.innerHTML = `
-      <div class="meta" id="totalPercent">Total percent: ${total.toFixed(2)}%</div>
-      <div style="margin-top:6px; display:flex; gap:8px; justify-content:flex-start; align-items:center;">
+      <div class="meta" id="totalPercent">Total percent: ${total.toFixed(2)}% • Rolls: ${totalRolls}</div>
+      <div style="margin-top:6px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
         <button id="normalizeBtn" style="padding:6px 10px; font-size:13px; border-radius:6px; cursor:pointer;">Toggle Normalize View</button>
-        <div class="small" style="color:#cfcfcf;">(Normalized = actual chance based on total)</div>
+        <button id="resetStatsBtn" style="padding:6px 10px; font-size:13px; border-radius:6px; cursor:pointer; background:#444;color:#fff;">Reset Stats</button>
+        <div class="small" style="color:#cfcfcf;">(Normalized = actual chance based on total weights). Observed = actual drop % from rolls.</div>
       </div>
       <div style="height:8px"></div>
       <div id="rateRows">
-        ${normalized.map(w => 
+        ${normalized.map((w, idx) => 
           `<div class="rate-item">
-             <span>${escapeHtml(w.name)}</span>
-             <span>
-               ${Number(w.percent).toFixed(2)}% 
-               <span class="small" style="margin-left:8px; color:#bdbdbd;">(${w.normalizedPercent.toFixed(2)}%)</span>
-             </span>
+             <div style="display:flex; gap:8px; align-items:center; width:100%; justify-content:space-between;">
+               <div style="display:flex; flex-direction:column; align-items:flex-start;">
+                 <span>${escapeHtml(w.name)}</span>
+                 <span class="small" style="color:#bdbdbd; margin-top:4px;">
+                   Observed: <span id="observed-${idx}">0.00%</span> • Count: <span id="count-${idx}">0</span>
+                 </span>
+               </div>
+               <div style="text-align:right;">
+                 <div id="displayPct-${idx}">${Number(w.percent).toFixed(2)}%</div>
+                 <div class="small" style="color:#bdbdbd;">(${w.normalizedPercent.toFixed(2)}%)</div>
+               </div>
+             </div>
            </div>`
         ).join('')}
       </div>
     `;
 
-    // normalize toggle: switches between showing raw percent and normalized percent as the main value
+    // set initial observed counts based on loaded counters
+    updateCountersUI();
+
+    // normalize toggle
     const normalizeBtn = document.getElementById('normalizeBtn');
     let showingNormalized = false;
     normalizeBtn.addEventListener('click', () => {
       showingNormalized = !showingNormalized;
-      const rowsContainer = document.getElementById('rateRows');
-      rowsContainer.innerHTML = normalized.map(w => {
-        const left = escapeHtml(w.name);
-        if (showingNormalized) {
-          return `<div class="rate-item"><span>${left}</span><span>${w.normalizedPercent.toFixed(2)}%</span></div>`;
-        } else {
-          return `<div class="rate-item"><span>${left}</span><span>${Number(w.percent).toFixed(2)}%</span></div>`;
+      waifus.forEach((w, idx) => {
+        const display = document.getElementById(`displayPct-${idx}`);
+        if (display) {
+          display.textContent = showingNormalized ? `${normalized[idx].normalizedPercent.toFixed(2)}%` : `${Number(w.percent).toFixed(2)}%`;
         }
-      }).join('');
+      });
       normalizeBtn.textContent = showingNormalized ? 'Show Raw Percents' : 'Toggle Normalize View';
+    });
+
+    // reset button
+    const resetBtn = document.getElementById('resetStatsBtn');
+    resetBtn.addEventListener('click', () => {
+      if (!confirm('Reset semua statistik (counters dan total rolls)?')) return;
+      resetCounters();
     });
 
   } catch (err) {
@@ -260,22 +334,16 @@ async function loadData() {
   }
 }
 
-
 /* -------------------- Rarity label helper -------------------- */
 function getRarityLabel(percent) {
-  // Jika percent tidak valid, treat as common
   if (isNaN(percent)) return { key: 'common', text: 'Common' };
 
-  // <-- KONFIGURASI THRESHOLDS (ubah sini kalau mau) -->
-  // Semakin kecil 'percent' => semakin langka.
   const thresholds = {
-    ur: 0.2,    // Ultra Rare (UR) : percent <= 0.2%
-    ssr: 1,   // Super Super Rare (SSR) : percent <= 1%
-    sr: 3,    // Super Rare (SR) : percent <= 3%
-    rare: 6   // Rare : percent <= 6%
-    // anything > rare => Common
+    ur: 0.2,
+    ssr: 1,
+    sr: 3,
+    rare: 6
   };
-  // <-- akhir konfigurasi -->
 
   if (percent <= thresholds.ur) return { key: 'ur', text: 'UR' };
   if (percent <= thresholds.ssr) return { key: 'ssr', text: 'SSR' };
@@ -284,23 +352,16 @@ function getRarityLabel(percent) {
   return { key: 'common', text: 'Common' };
 }
 
-
-/* 
-  showRarityLabel: places persistent label inside #result but outside #resultContent,
-  so that #resultContent.innerHTML can be updated freely without removing the label.
-*/
+/* showRarityLabel (persistent) */
 function showRarityLabel(rarityObj) {
   let label = document.getElementById('rarity-label');
   const resultDiv = document.getElementById('result');
 
-  // ensure wrapper for result content exists
   let content = document.getElementById('resultContent');
   if (!content) {
     content = document.createElement('div');
     content.id = 'resultContent';
-    // move any existing children into content (except existing label if present)
     while (resultDiv.firstChild) {
-      // if firstChild is already a label, break
       if (resultDiv.firstChild.id === 'rarity-label') break;
       content.appendChild(resultDiv.firstChild);
     }
@@ -311,7 +372,6 @@ function showRarityLabel(rarityObj) {
     label = document.createElement('div');
     label.id = 'rarity-label';
     label.className = 'rarity-label';
-    // label styling layout kept in CSS; we append label BEFORE content so it sits above content
     resultDiv.insertBefore(label, content);
   }
 
@@ -319,7 +379,6 @@ function showRarityLabel(rarityObj) {
   const key = rarityObj.key || 'common';
   const iconText = key === 'ssr' ? '★' : (key === 'rare' ? '✦' : '•');
 
-  // update classes and HTML (persistent)
   label.className = `rarity-label rarity-${key} show`;
   label.innerHTML = `
     <div class="badge">
@@ -328,12 +387,10 @@ function showRarityLabel(rarityObj) {
     </div>
     <span class="subtitle small">${key.toUpperCase()}</span>
   `;
-
-  // settle animation class after entrance
   setTimeout(() => label.classList.add('settled'), 420);
 }
 
-/* -------------------- Roll logic (memanggil confetti + sound + label) -------------------- */
+/* -------------------- Roll logic (increment counters + confetti + sound) -------------------- */
 async function rollGacha() {
   if (isRolling) return;
   if (!waifus.length) return alert("Data waifu belum dimuat!");
@@ -342,12 +399,10 @@ async function rollGacha() {
   btn.disabled = true;
 
   const resultDiv = document.getElementById("result");
-  // ensure resultContent exists and use it for changing content
   let content = document.getElementById('resultContent');
   if (!content) {
     content = document.createElement('div');
     content.id = 'resultContent';
-    // move current children (if any) into content
     while (resultDiv.firstChild) content.appendChild(resultDiv.firstChild);
     resultDiv.appendChild(content);
   }
@@ -371,49 +426,54 @@ async function rollGacha() {
 
   const picked = pickByPercent(waifus);
 
-  // show/update persistent rarity label (will not be removed)
+  // increment counters (persist & update UI)
+  const pickedIndex = waifus.findIndex(w => w.url === picked.url);
+  if (pickedIndex >= 0) {
+    counters[pickedIndex] = (counters[pickedIndex] || 0) + 1;
+    totalRolls = (totalRolls || 0) + 1;
+    saveCounters();
+    updateCountersUI();
+  }
+
   const rarity = getRarityLabel(picked.percent);
   showRarityLabel(rarity);
 
-  // small delay so label animation is visible before reveal
   await new Promise(r => setTimeout(r, 520));
 
   content.innerHTML = `<h2>${escapeHtml(picked.name)}</h2>`;
   const finalImg = createImageElement(picked.url, picked.name);
   content.appendChild(finalImg);
 
-  // final pops
- try {
-  if (rarity.key === 'ur') {
-    playPopSound(1.2);
-    setTimeout(() => playPopSound(0.9), 90);
-  } else if (rarity.key === 'ssr') {
-    playPopSound(1.0);
-    setTimeout(() => playPopSound(0.7), 80);
-  } else if (rarity.key === 'sr') {
-    playPopSound(0.9);
-  } else if (rarity.key === 'rare') {
-    playPopSound(0.7);
-  } else {
-    playPopSound(0.45);
-  }
-} catch (e) { /* ignore */ }
+  try {
+    if (rarity.key === 'ur') {
+      playPopSound(1.2);
+      setTimeout(() => playPopSound(0.9), 90);
+    } else if (rarity.key === 'ssr') {
+      playPopSound(1.0);
+      setTimeout(() => playPopSound(0.7), 80);
+    } else if (rarity.key === 'sr') {
+      playPopSound(0.9);
+    } else if (rarity.key === 'rare') {
+      playPopSound(0.7);
+    } else {
+      playPopSound(0.45);
+    }
+  } catch (e) { /* ignore */ }
 
   finalImg.style.transform = 'scale(0.92)';
   setTimeout(() => finalImg.style.transform = 'scale(1)', 120);
 
- // confetti per rarity
-if (rarity.key === 'ur') {
-  launchConfetti(300, 3800);
-} else if (rarity.key === 'ssr') {
-  launchConfetti(220, 3500);
-} else if (rarity.key === 'sr') {
-  launchConfetti(160, 3000);
-} else if (rarity.key === 'rare') {
-  launchConfetti(110, 2400);
-} else {
-  launchConfetti(60, 1800);
-}
+  if (rarity.key === 'ur') {
+    launchConfetti(300, 3800);
+  } else if (rarity.key === 'ssr') {
+    launchConfetti(220, 3500);
+  } else if (rarity.key === 'sr') {
+    launchConfetti(160, 3000);
+  } else if (rarity.key === 'rare') {
+    launchConfetti(110, 2400);
+  } else {
+    launchConfetti(60, 1800);
+  }
 
   btn.disabled = false;
   isRolling = false;
