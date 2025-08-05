@@ -1,3 +1,6 @@
+// public/script.js (updated)
+// Keep this whole file content to replace old script.js
+
 let waifus = [];
 let isRolling = false;
 
@@ -37,6 +40,7 @@ function createImageElement(src, alt) {
 /* -------------------- Preload images -------------------- */
 function preloadImages(urls) {
   urls.forEach(url => {
+    if (!url) return;
     const img = new Image();
     img.src = url;
   });
@@ -146,17 +150,14 @@ function ensureAudioCtx() {
 }
 
 function playPopSound(intensity = 1) {
-  // intensity: multiplier for volume / complexity (1 = normal)
   ensureAudioCtx();
   const ctx = audioCtx;
   const now = ctx.currentTime;
 
-  // small noise burst for "pop"
   const bufferSize = 0.1 * ctx.sampleRate;
   const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
   const data = buffer.getChannelData(0);
   for (let i = 0; i < bufferSize; i++) {
-    // white noise shaped by exponential decay
     data[i] = (Math.random() * 2 - 1) * Math.exp(-5 * i / bufferSize);
   }
   const noise = ctx.createBufferSource();
@@ -169,7 +170,6 @@ function playPopSound(intensity = 1) {
 
   noise.connect(noiseGain).connect(ctx.destination);
 
-  // click/low pitch tone for body
   const osc = ctx.createOscillator();
   const oscGain = ctx.createGain();
   osc.type = 'sine';
@@ -218,63 +218,75 @@ async function loadData() {
 
 /* -------------------- Rarity label helper -------------------- */
 function getRarityLabel(percent) {
+  // Jika percent tidak valid, treat as common
   if (isNaN(percent)) return { key: 'common', text: 'Common' };
-  if (percent <= 1) return { key: 'ssr', text: 'SSR' };
-  if (percent <= 5) return { key: 'rare', text: 'Rare' };
+
+  // <-- KONFIGURASI THRESHOLDS (ubah sini kalau mau) -->
+  // Semakin kecil 'percent' => semakin langka.
+  const thresholds = {
+    ur: 0.2,    // Ultra Rare (UR) : percent <= 0.2%
+    ssr: 1,   // Super Super Rare (SSR) : percent <= 1%
+    sr: 3,    // Super Rare (SR) : percent <= 3%
+    rare: 6   // Rare : percent <= 6%
+    // anything > rare => Common
+  };
+  // <-- akhir konfigurasi -->
+
+  if (percent <= thresholds.ur) return { key: 'ur', text: 'UR' };
+  if (percent <= thresholds.ssr) return { key: 'ssr', text: 'SSR' };
+  if (percent <= thresholds.sr) return { key: 'sr', text: 'SR' };
+  if (percent <= thresholds.rare) return { key: 'rare', text: 'Rare' };
   return { key: 'common', text: 'Common' };
 }
 
+
+/* 
+  showRarityLabel: places persistent label inside #result but outside #resultContent,
+  so that #resultContent.innerHTML can be updated freely without removing the label.
+*/
 function showRarityLabel(rarityObj) {
-  // create or reuse label element
   let label = document.getElementById('rarity-label');
   const resultDiv = document.getElementById('result');
+
+  // ensure wrapper for result content exists
+  let content = document.getElementById('resultContent');
+  if (!content) {
+    content = document.createElement('div');
+    content.id = 'resultContent';
+    // move any existing children into content (except existing label if present)
+    while (resultDiv.firstChild) {
+      // if firstChild is already a label, break
+      if (resultDiv.firstChild.id === 'rarity-label') break;
+      content.appendChild(resultDiv.firstChild);
+    }
+    resultDiv.appendChild(content);
+  }
 
   if (!label) {
     label = document.createElement('div');
     label.id = 'rarity-label';
     label.className = 'rarity-label';
-    // place at top of result area and center
-    label.style.display = 'flex';
-    label.style.flexDirection = 'column';
-    label.style.alignItems = 'center';
-    label.style.justifyContent = 'center';
-    resultDiv.appendChild(label);
+    // label styling layout kept in CSS; we append label BEFORE content so it sits above content
+    resultDiv.insertBefore(label, content);
   }
 
-  // Build badge HTML (icon + text). Icon uses first letter of rarity for style.
   const txt = rarityObj.text || 'Common';
   const key = rarityObj.key || 'common';
   const iconText = key === 'ssr' ? '★' : (key === 'rare' ? '✦' : '•');
 
-  label.className = `rarity-label rarity-${key}`;
+  // update classes and HTML (persistent)
+  label.className = `rarity-label rarity-${key} show`;
   label.innerHTML = `
-    <div class="badge hidden">
+    <div class="badge">
       <span class="icon">${iconText}</span>
       <span class="text">${txt}</span>
     </div>
     <span class="subtitle small">${key.toUpperCase()}</span>
   `;
 
-  // Force reflow then animate in (show -> settled)
-  requestAnimationFrame(() => {
-    label.classList.add('show');
-    // after entrance, settle to normal scale
-    setTimeout(() => {
-      const badgeEl = label.querySelector('.badge');
-      if (badgeEl) badgeEl.classList.add('settled');
-    }, 420);
-  });
-
-   // ❌ Hapus bagian ini supaya tidak auto-remove
-  // setTimeout(() => {
-  //   label.classList.remove('show');
-  //   label.classList.add('hide');
-  //   setTimeout(() => {
-  //     if (label && label.parentElement) label.remove();
-  //   }, 360);
-  // }, 1600);
+  // settle animation class after entrance
+  setTimeout(() => label.classList.add('settled'), 420);
 }
-
 
 /* -------------------- Roll logic (memanggil confetti + sound + label) -------------------- */
 async function rollGacha() {
@@ -285,16 +297,25 @@ async function rollGacha() {
   btn.disabled = true;
 
   const resultDiv = document.getElementById("result");
-  resultDiv.innerHTML = `<h2>🎰 Rolling...</h2>`;
+  // ensure resultContent exists and use it for changing content
+  let content = document.getElementById('resultContent');
+  if (!content) {
+    content = document.createElement('div');
+    content.id = 'resultContent';
+    // move current children (if any) into content
+    while (resultDiv.firstChild) content.appendChild(resultDiv.firstChild);
+    resultDiv.appendChild(content);
+  }
+
+  content.innerHTML = `<h2>🎰 Rolling...</h2>`;
 
   const spinCount = 12;
   for (let i = 0; i < spinCount; i++) {
     const random = waifus[Math.floor(Math.random() * waifus.length)];
-    resultDiv.innerHTML = `<h3 class="small">🎲 ...</h3>`;
+    content.innerHTML = `<h3 class="small">🎲 ...</h3>`;
     const img = createImageElement(random.url, random.name);
-    resultDiv.appendChild(img);
+    content.appendChild(img);
 
-    // small pop during spin for tactile feel (low intensity)
     try { playPopSound(0.18); } catch (e) { /* ignore if audio blocked */ }
 
     img.style.transform = 'scale(0.96)';
@@ -305,42 +326,49 @@ async function rollGacha() {
 
   const picked = pickByPercent(waifus);
 
-  // show rarity label
+  // show/update persistent rarity label (will not be removed)
   const rarity = getRarityLabel(picked.percent);
   showRarityLabel(rarity);
 
-  // small delay so label is visible before final reveal
+  // small delay so label animation is visible before reveal
   await new Promise(r => setTimeout(r, 520));
 
-  resultDiv.innerHTML = `<h2>${escapeHtml(picked.name)}</h2>`;
+  content.innerHTML = `<h2>${escapeHtml(picked.name)}</h2>`;
   const finalImg = createImageElement(picked.url, picked.name);
-  resultDiv.appendChild(finalImg);
+  content.appendChild(finalImg);
 
-  // bigger pop(s) for final reveal
-  try {
-    if (rarity.key === 'ssr') {
-      playPopSound(1.0);
-      setTimeout(() => playPopSound(0.7), 80);
-    } else if (rarity.key === 'rare') {
-      playPopSound(0.7);
-    } else {
-      playPopSound(0.45);
-    }
-  } catch (e) {
-    /* audio may be blocked until user interaction; ignore */
+  // final pops
+ try {
+  if (rarity.key === 'ur') {
+    playPopSound(1.2);
+    setTimeout(() => playPopSound(0.9), 90);
+  } else if (rarity.key === 'ssr') {
+    playPopSound(1.0);
+    setTimeout(() => playPopSound(0.7), 80);
+  } else if (rarity.key === 'sr') {
+    playPopSound(0.9);
+  } else if (rarity.key === 'rare') {
+    playPopSound(0.7);
+  } else {
+    playPopSound(0.45);
   }
+} catch (e) { /* ignore */ }
 
   finalImg.style.transform = 'scale(0.92)';
   setTimeout(() => finalImg.style.transform = 'scale(1)', 120);
 
-  // confetti intensity by rarity
-  if (rarity.key === 'ssr') {
-    launchConfetti(220, 3500);
-  } else if (rarity.key === 'rare') {
-    launchConfetti(140, 3000);
-  } else {
-    launchConfetti(60, 2000);
-  }
+ // confetti per rarity
+if (rarity.key === 'ur') {
+  launchConfetti(300, 3800);
+} else if (rarity.key === 'ssr') {
+  launchConfetti(220, 3500);
+} else if (rarity.key === 'sr') {
+  launchConfetti(160, 3000);
+} else if (rarity.key === 'rare') {
+  launchConfetti(110, 2400);
+} else {
+  launchConfetti(60, 1800);
+}
 
   btn.disabled = false;
   isRolling = false;
