@@ -265,16 +265,14 @@ function showRarityLabel(rarityObj) {
     }, 420);
   });
 
-  // auto-hide after 1.6s
-  setTimeout(() => {
-    // animate out
-    label.classList.remove('show');
-    label.classList.add('hide');
-    // remove after transition
-    setTimeout(() => {
-      if (label && label.parentElement) label.remove();
-    }, 360);
-  }, 1600);
+   // ❌ Hapus bagian ini supaya tidak auto-remove
+  // setTimeout(() => {
+  //   label.classList.remove('show');
+  //   label.classList.add('hide');
+  //   setTimeout(() => {
+  //     if (label && label.parentElement) label.remove();
+  //   }, 360);
+  // }, 1600);
 }
 
 
