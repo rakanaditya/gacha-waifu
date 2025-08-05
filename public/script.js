@@ -193,28 +193,73 @@ async function loadData() {
     if (!res.ok) throw new Error('Gagal mengambil data waifu (status ' + res.status + ')');
     waifus = await res.json();
 
+    // sanitize & ensure numbers
     waifus = waifus.map((w, i) => ({
       name: w.name || `Waifu ${i + 1}`,
       url: w.url || '',
       percent: Number(w.percent) || 0
     }));
 
+    // Preload images for smooth animation
     preloadImages(waifus.map(w => w.url));
 
-    const list = document.getElementById("rateList");
-    const total = waifus.reduce((s, w) => s + w.percent, 0);
+    // compute total percent
+    const total = waifus.reduce((s, w) => s + (Number(w.percent) || 0), 0);
 
+    // compute normalized chance (relative %) for display
+    const normalized = waifus.map(w => {
+      const rel = (total > 0) ? (Number(w.percent) / total) * 100 : (100 / waifus.length);
+      return {
+        ...w,
+        normalizedPercent: rel
+      };
+    });
+
+    // build UI: total, normalize toggle, and rows showing both defined percent and actual chance
+    const list = document.getElementById("rateList");
     list.innerHTML = `
-      <div class="meta">Total percent: ${total.toFixed(2)}%</div>
-      ${waifus.map(w =>
-        `<div class="rate-item"><span>${escapeHtml(w.name)}</span><span>${w.percent.toFixed(2)}%</span></div>`
-      ).join('')}
+      <div class="meta" id="totalPercent">Total percent: ${total.toFixed(2)}%</div>
+      <div style="margin-top:6px; display:flex; gap:8px; justify-content:flex-start; align-items:center;">
+        <button id="normalizeBtn" style="padding:6px 10px; font-size:13px; border-radius:6px; cursor:pointer;">Toggle Normalize View</button>
+        <div class="small" style="color:#cfcfcf;">(Normalized = actual chance based on total)</div>
+      </div>
+      <div style="height:8px"></div>
+      <div id="rateRows">
+        ${normalized.map(w => 
+          `<div class="rate-item">
+             <span>${escapeHtml(w.name)}</span>
+             <span>
+               ${Number(w.percent).toFixed(2)}% 
+               <span class="small" style="margin-left:8px; color:#bdbdbd;">(${w.normalizedPercent.toFixed(2)}%)</span>
+             </span>
+           </div>`
+        ).join('')}
+      </div>
     `;
+
+    // normalize toggle: switches between showing raw percent and normalized percent as the main value
+    const normalizeBtn = document.getElementById('normalizeBtn');
+    let showingNormalized = false;
+    normalizeBtn.addEventListener('click', () => {
+      showingNormalized = !showingNormalized;
+      const rowsContainer = document.getElementById('rateRows');
+      rowsContainer.innerHTML = normalized.map(w => {
+        const left = escapeHtml(w.name);
+        if (showingNormalized) {
+          return `<div class="rate-item"><span>${left}</span><span>${w.normalizedPercent.toFixed(2)}%</span></div>`;
+        } else {
+          return `<div class="rate-item"><span>${left}</span><span>${Number(w.percent).toFixed(2)}%</span></div>`;
+        }
+      }).join('');
+      normalizeBtn.textContent = showingNormalized ? 'Show Raw Percents' : 'Toggle Normalize View';
+    });
+
   } catch (err) {
     console.error(err);
-    alert("Gagal memuat data waifu: " + err.message + "\nPastikan file public/images.json tersedia dan dijalankan lewat server (bukan file:///)");
+    alert("Gagal memuat data waifu: " + err.message + "\nPastikan file public/images.json tersedia dan dijalankan lewat server (bukan file:///)"); 
   }
 }
+
 
 /* -------------------- Rarity label helper -------------------- */
 function getRarityLabel(percent) {
