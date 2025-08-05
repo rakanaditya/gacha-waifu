@@ -1,418 +1,399 @@
-// public/script.js (pity improved — per-rarity multiplier)
+// public/script.js (SPA + gacha + comments & rating localStorage)
+// NOTE: jika kamu punya confetti/sound lebih lengkap, replace launchConfetti() & playPopSound() dengan versi lama.
+
 let waifus = [];
 let isRolling = false;
 
-/* -------------------- Pity config -------------------- */
-const PITY_STEP = 0.6;       // base percent added per failed roll (tweak this)
-const PITY_MAX_BONUS = 50;   // cap absolute bonus (in percent)
+/* -------------------- localStorage keys -------------------- */
+const COMMENTS_KEY = 'gacha_comments_v1';
+const OBS_KEY = 'gacha_observed_v1';
+const LAST_KEY = 'gacha_last_v1';
 
-/* Multiplier to make pity stronger for low-base items.
-   We compute multiplier from base percent via simple rules below. */
-const PITY_MULTIPLIER_BY_RARITY = {
-  // we'll compute multiplier dynamically: smaller base -> larger multiplier
-  // these constants are reference, actual multiplier computed in function
-};
-
-/* -------------------- Storage keys & stats -------------------- */
-const STORAGE_KEY = 'gacha_stats_v1';
-let counters = [];
-let totalRolls = 0;
-let pityCounters = [];
-
-/* -------------------- Utilities -------------------- */
-function escapeHtml(str) {
-  return String(str).replace(/[&<>"']/g, m => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[m]));
+/* -------------------- Simple pickByPercent (no pity in this file) -------------------- */
+function pickByPercent(items) {
+  const totalPercent = items.reduce((sum, item) => sum + (Number(item.percent) || 0), 0);
+  if (totalPercent <= 0) return items[Math.floor(Math.random() * items.length)];
+  const rand = Math.random() * totalPercent;
+  let acc = 0;
+  for (const item of items) {
+    acc += Number(item.percent) || 0;
+    if (rand <= acc) return item;
+  }
+  return items[items.length - 1];
 }
 
-function createImageElement(src, alt) {
-  const img = document.createElement('img');
-  img.src = src;
-  img.alt = alt;
-  img.loading = 'lazy';
-  img.width = 300;
-  img.onerror = () => {
-    img.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(
-      `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><rect width="100%" height="100%" fill="#222"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#bbb" font-size="16">Gagal memuat gambar</text></svg>`
-    );
-  };
-  return img;
-}
-
-/* -------------------- Preload images -------------------- */
-function preloadImages(urls) {
-  urls.forEach(url => {
-    if (!url) return;
-    const img = new Image();
-    img.src = url;
-  });
-}
-
-/* -------------------- Confetti & sound (same as before) -------------------- */
-function createConfettiCanvas() {
-  let canvas = document.getElementById('confetti-canvas');
-  if (canvas) return canvas;
-  canvas = document.createElement('canvas');
-  canvas.id = 'confetti-canvas';
-  Object.assign(canvas.style, {
-    position: 'fixed', left: '0', top: '0', width: '100%', height: '100%',
-    pointerEvents: 'none', zIndex: 9999
-  });
-  document.body.appendChild(canvas);
-  function resize() {
-    canvas.width = window.innerWidth * devicePixelRatio;
-    canvas.height = window.innerHeight * devicePixelRatio;
+/* -------------------- minimal confetti & pop (replace if you have better) -------------------- */
+function launchConfetti(count = 60) {
+  const canvasId = 'confetti-canvas';
+  let canvas = document.getElementById(canvasId);
+  let created = false;
+  if (!canvas) {
+    canvas = document.createElement('canvas');
+    canvas.id = canvasId;
+    Object.assign(canvas.style, { position:'fixed', left:0, top:0, width:'100%', height:'100%', pointerEvents:'none', zIndex: 9999 });
+    document.body.appendChild(canvas);
+    created = true;
+  }
+  const ctx = canvas.getContext('2d');
+  // handle pixel ratio and dynamic sizing
+  function setSize() {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(window.innerWidth * dpr);
+    canvas.height = Math.floor(window.innerHeight * dpr);
     canvas.style.width = window.innerWidth + 'px';
     canvas.style.height = window.innerHeight + 'px';
-    canvas.getContext('2d').setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
-  resize();
-  window.addEventListener('resize', resize);
-  return canvas;
-}
-function launchConfetti(particleCount = 60, duration = 2500) {
-  const canvas = createConfettiCanvas();
-  const ctx = canvas.getContext('2d');
-  const W = window.innerWidth, H = window.innerHeight;
+  setSize();
+  const onResize = () => setSize();
+  window.addEventListener('resize', onResize);
+
   const colors = ['#ff4d6d','#ffd166','#06d6a0','#4d6bff','#ff6bcb','#9b5cff'];
-  const particles = [];
-  for (let i = 0; i < particleCount; i++) {
-    const size = Math.random() * 10 + 6;
-    particles.push({
-      x: Math.random() * W,
-      y: -10 - Math.random() * 50,
-      vx: (Math.random() - 0.5) * 6,
-      vy: Math.random() * 4 + 2,
-      size, rot: Math.random() * Math.PI * 2,
-      vrot: (Math.random() - 0.5) * 0.2,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      shape: Math.random() > 0.5 ? 'rect' : 'circle',
-      ttl: duration + Math.random() * 400
+  const parts = [];
+  for (let i=0;i<count;i++){
+    parts.push({
+      x: Math.random()*window.innerWidth,
+      y: -10 - Math.random()*200,
+      vx:(Math.random()-0.5)*6,
+      vy:2+Math.random()*4,
+      r:4+Math.random()*8,
+      c: colors[Math.floor(Math.random()*colors.length)]
     });
   }
-  let start = performance.now(), rafId;
-  function draw(now) {
-    const elapsed = now - start;
-    ctx.clearRect(0,0,W,H);
-    for (let p of particles) {
-      p.vy += 0.05; p.x += p.vx; p.y += p.vy; p.rot += p.vrot;
-      ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.rot); ctx.fillStyle = p.color;
-      if (p.shape === 'rect') ctx.fillRect(-p.size/2, -p.size/2, p.size, p.size*0.6);
-      else { ctx.beginPath(); ctx.ellipse(0,0,p.size/2,p.size*0.35,0,0,Math.PI*2); ctx.fill(); }
-      ctx.restore();
+  let start = performance.now();
+  let rafId = null;
+  function draw(t){
+    const dt = t - start;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    for (let p of parts){
+      p.vy += 0.05;
+      p.x += p.vx;
+      p.y += p.vy;
+      ctx.fillStyle = p.c;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, p.r, p.r*0.6, 0, 0, Math.PI*2);
+      ctx.fill();
     }
-    const t = Math.min(1, elapsed/duration);
-    if (t > 0.85) { ctx.fillStyle = `rgba(0,0,0,${(t-0.85)/0.15})`; ctx.fillRect(0,0,W,H); }
-    if (elapsed < duration + 600) rafId = requestAnimationFrame(draw);
-    else { ctx.clearRect(0,0,W,H); cancelAnimationFrame(rafId); }
+    if (dt < 2600) rafId = requestAnimationFrame(draw);
+    else {
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      // cleanup
+      window.removeEventListener('resize', onResize);
+      if (created && canvas && canvas.parentNode) {
+        setTimeout(()=>{ try{ canvas.parentNode.removeChild(canvas); }catch(e){} }, 200);
+      }
+      if (rafId) cancelAnimationFrame(rafId);
+    }
   }
   rafId = requestAnimationFrame(draw);
 }
-let audioCtx = null;
-function ensureAudioCtx() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
-function playPopSound(intensity = 1) {
-  ensureAudioCtx(); const ctx = audioCtx; const now = ctx.currentTime;
-  const bufferSize = 0.1 * ctx.sampleRate; const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < bufferSize; i++) data[i] = (Math.random()*2 - 1) * Math.exp(-5 * i / bufferSize);
-  const noise = ctx.createBufferSource(); noise.buffer = buffer;
-  const noiseGain = ctx.createGain(); noiseGain.gain.setValueAtTime(0.001 * intensity, now);
-  noiseGain.gain.exponentialRampToValueAtTime(0.16 * intensity, now + 0.004);
-  noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
-  noise.connect(noiseGain).connect(ctx.destination);
-  const osc = ctx.createOscillator(); const oscGain = ctx.createGain(); osc.type = 'sine';
-  osc.frequency.setValueAtTime(300 * (1 + Math.random()*0.5), now);
-  oscGain.gain.setValueAtTime(0.0008 * intensity, now);
-  oscGain.gain.exponentialRampToValueAtTime(0.12 * intensity, now + 0.006);
-  oscGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
-  osc.connect(oscGain).connect(ctx.destination);
-  noise.start(now); osc.start(now); noise.stop(now + 0.18); osc.stop(now + 0.18);
-}
 
-/* -------------------- Storage load/save -------------------- */
-function loadStats(waifusLength) {
+function playPopSound() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed.counters) && parsed.counters.length === waifusLength) {
-        counters = parsed.counters.map(n => Number(n) || 0);
-        pityCounters = (Array.isArray(parsed.pityCounters) && parsed.pityCounters.length === waifusLength)
-          ? parsed.pityCounters.map(n => Number(n)||0)
-          : new Array(waifusLength).fill(0);
-        totalRolls = Number(parsed.totalRolls) || counters.reduce((s,v)=>s+v,0);
-        return;
-      }
+    const CtxClass = window.AudioContext || window.webkitAudioContext;
+    if (!CtxClass) return;
+    const ctx = new CtxClass();
+    if (ctx.state === 'suspended' && typeof ctx.resume === 'function') {
+      ctx.resume().catch(()=>{});
     }
-  } catch(e){}
-  counters = new Array(waifusLength).fill(0);
-  pityCounters = new Array(waifusLength).fill(0);
-  totalRolls = 0;
-  saveStats();
-}
-function saveStats() {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ counters, totalRolls, pityCounters })); }
-  catch (e) { console.warn('Could not save stats', e); }
-}
-function resetStats() {
-  counters = new Array(waifus.length).fill(0);
-  pityCounters = new Array(waifus.length).fill(0);
-  totalRolls = 0;
-  saveStats();
-  updateCountersUI();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type='sine'; o.frequency.value = 400 + Math.random()*200;
+    g.gain.value = 0.0005;
+    o.connect(g); g.connect(ctx.destination);
+    o.start();
+    g.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
+    o.stop(ctx.currentTime + 0.18);
+    // close context shortly after to free resources
+    setTimeout(()=>{ try{ ctx.close(); }catch(e){} }, 400);
+  } catch (e){ /* ignore */ }
 }
 
-/* -------------------- Helpers for pity multiplier -------------------- */
-/* Compute multiplier based on basePercent:
-   - very small base -> larger multiplier
-   - medium base -> moderate multiplier
-   - large base -> multiplier 1 (no extra)
-*/
-function computePityMultiplier(basePercent) {
-  if (basePercent <= 0.2) return 6;   // ultra rare: big boost
-  if (basePercent <= 1)   return 4;   // ssr: strong boost
-  if (basePercent <= 3)   return 2;   // sr: mild boost
-  return 1;                           // common/others: normal
+/* -------------------- UI helpers -------------------- */
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function createImageElement(src, alt){
+  const img = document.createElement('img');
+  img.src = src; img.alt = alt; img.loading='lazy'; img.width=300;
+  img.onerror = ()=> img.src = 'data:image/svg+xml;utf8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><rect width="100%" height="100%" fill="#222"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#bbb" font-size="16">Gagal memuat gambar</text></svg>');
+  return img;
 }
 
-/* -------------------- Effective pick with pity -------------------- */
-function pickByPercentWithPity(items, pityArr) {
-  const adjusted = items.map((it, idx) => {
-    const base = Number(it.percent) || 0;
-    const mult = computePityMultiplier(base);
-    const bonus = (pityArr[idx] || 0) * PITY_STEP * mult;
-    const effective = Math.min(base + bonus, base + PITY_MAX_BONUS);
-    return { ...it, effectivePercent: effective };
+/* -------------------- Data load (images.json) -------------------- */
+async function loadData(){
+  try {
+    const res = await fetch('/images.json', {cache:'no-store'});
+    if (!res.ok) throw new Error('images.json tidak ditemukan');
+    waifus = await res.json();
+    waifus = waifus.map((w,i)=>({ name: w.name || `Waifu ${i+1}`, url: w.url||'', percent: Number(w.percent)||0 }));
+    preloadImages(waifus.map(w=>w.url));
+    buildRateList();
+    // after building rate list, also show last pick if any
+    showLastPickIfAny();
+  } catch (err){
+    console.error(err);
+    const rl = document.getElementById('rateList');
+    if (rl) rl.innerHTML = `<div class="meta">Gagal memuat images.json: ${escapeHtml(err.message)}</div>`;
+  }
+}
+function preloadImages(urls){ urls.forEach(u=>{ if (!u) return; const i=new Image(); i.src=u; }); }
+
+/* -------------------- Build rate list UI (with normalize toggle) -------------------- */
+let normalizedCache = null;
+function buildRateList(){
+  const total = waifus.reduce((s,w)=>s+(Number(w.percent)||0),0);
+  normalizedCache = waifus.map(w=>({ ...w, normalizedPercent: total>0 ? (Number(w.percent)/total)*100 : 100/waifus.length }));
+  const list = document.getElementById('rateList');
+  if (!list) return;
+  list.innerHTML = `
+    <div class="meta" id="totalPercent">Total percent: ${total.toFixed(2)}%</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+      <button id="normalizeBtn" class="ghost">Toggle Normalize View</button>
+      <div class="small">(Normalized = peluang aktual berdasarkan total bobot)</div>
+    </div>
+    <div id="rateRows">
+      ${normalizedCache.map((w,idx)=>`
+        <div class="rate-item">
+          <div>
+            <strong>${escapeHtml(w.name)}</strong>
+            <div class="small">Observed: <span id="observed-${idx}">0.00%</span> • Count: <span id="count-${idx}">0</span></div>
+          </div>
+          <div style="text-align:right;">
+            <div id="displayPct-${idx}">${Number(w.percent).toFixed(2)}%</div>
+            <div class="small">(${w.normalizedPercent.toFixed(2)}%)</div>
+          </div>
+        </div>`).join('')}
+    </div>
+  `;
+  const btn = document.getElementById('normalizeBtn');
+  if (btn) {
+    btn.addEventListener('click', ()=>{
+      const showing = btn.dataset.showing === '1';
+      waifus.forEach((w,idx)=>{
+        const d = document.getElementById(`displayPct-${idx}`);
+        if (!d) return;
+        d.textContent = showing ? `${Number(w.percent).toFixed(2)}%` : `${normalizedCache[idx].normalizedPercent.toFixed(2)}%`;
+      });
+      btn.dataset.showing = showing ? '0' : '1';
+      btn.textContent = showing ? 'Toggle Normalize View' : 'Show Raw Percents';
+    });
+  }
+  // refresh observed if stored
+  refreshObservedFromStorage();
+}
+
+/* -------------------- Comments & rating (localStorage) -------------------- */
+function loadComments(){
+  try {
+    const raw = localStorage.getItem(COMMENTS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch(e){ return []; }
+}
+function saveComments(arr){ localStorage.setItem(COMMENTS_KEY, JSON.stringify(arr)); }
+function renderComments(){
+  const list = document.getElementById('commentsList');
+  if (!list) return;
+  const items = loadComments();
+  if (!items.length) { list.innerHTML = `<div class="small">Belum ada komentar — jadi yang pertama!</div>`; return; }
+  list.innerHTML = items.slice().reverse().map(it=>`
+    <div class="comment-item">
+      <div class="comment-meta">
+        <div><strong>${escapeHtml(it.name||'Anonim')}</strong> • ${'★'.repeat(it.rating)}${'☆'.repeat(5-it.rating)}</div>
+        <div class="small">${new Date(it.ts).toLocaleString()}</div>
+      </div>
+      <div class="comment-body">${escapeHtml(it.text)}</div>
+    </div>
+  `).join('');
+}
+
+/* handle comment form */
+function initCommentForm(){
+  const stars = Array.from(document.querySelectorAll('#ratingInput .star'));
+  let rating = 5;
+  function setStar(v){
+    rating = v;
+    stars.forEach(s=> s.classList.toggle('active', Number(s.dataset.value) <= v) );
+  }
+  stars.forEach(s=>{
+    s.addEventListener('click', ()=> setStar(Number(s.dataset.value)) );
   });
+  setStar(5);
 
-  const totalEffective = adjusted.reduce((s,a) => s + a.effectivePercent, 0);
-  if (totalEffective <= 0) return items[Math.floor(Math.random()*items.length)];
-
-  const rand = Math.random() * totalEffective;
-  let acc = 0;
-  for (const a of adjusted) {
-    acc += a.effectivePercent;
-    if (rand <= acc) return a;
+  const sendBtn = document.getElementById('sendComment');
+  if (sendBtn) {
+    sendBtn.addEventListener('click', ()=>{
+      const nameEl = document.getElementById('nameInput');
+      const commentEl = document.getElementById('commentInput');
+      const anonEl = document.getElementById('anonChk');
+      const name = nameEl ? nameEl.value.trim() : '';
+      const text = commentEl ? commentEl.value.trim() : '';
+      const anon = anonEl ? anonEl.checked : false;
+      if (!text) { alert('Tulis komentar dulu.'); return; }
+      const entry = { name: anon ? '' : (name || 'Anonim'), text, rating, ts: Date.now() };
+      const arr = loadComments();
+      arr.push(entry);
+      saveComments(arr);
+      if (commentEl) commentEl.value = '';
+      renderComments();
+    });
   }
-  return adjusted[adjusted.length-1];
+  renderComments();
 }
 
-/* -------------------- Update counters UI -------------------- */
-function updateCountersUI() {
-  const totalEl = document.getElementById('totalPercent');
-  if (totalEl) {
-    const totalDefined = waifus.reduce((s,w) => s + (Number(w.percent)||0), 0);
-    totalEl.textContent = `Total percent: ${totalDefined.toFixed(2)}% • Rolls: ${totalRolls}`;
+/* -------------------- Observed counters (simple localStorage) -------------------- */
+function loadObserved(){
+  try {
+    const raw = localStorage.getItem(OBS_KEY);
+    return raw ? JSON.parse(raw) : { counts: [], total:0 };
+  } catch(e){ return { counts:[], total:0 }; }
+}
+function saveObserved(obj){ localStorage.setItem(OBS_KEY, JSON.stringify(obj)); }
+function refreshObservedFromStorage(){
+  const obs = loadObserved();
+  if (!waifus.length) return;
+  if (!Array.isArray(obs.counts) || obs.counts.length !== waifus.length){
+    obs.counts = new Array(waifus.length).fill(0);
+    obs.total = 0;
+    saveObserved(obs);
   }
-  waifus.forEach((w, idx) => {
+  waifus.forEach((w,idx)=>{
     const countEl = document.getElementById(`count-${idx}`);
     const obsEl = document.getElementById(`observed-${idx}`);
-    const pityEl = document.getElementById(`pity-${idx}`);
-    if (countEl) countEl.textContent = String(counters[idx] || 0);
+    if (countEl) countEl.textContent = String(obs.counts[idx]||0);
     if (obsEl) {
-      const observedPct = totalRolls > 0 ? (100 * (Number(counters[idx]||0) / totalRolls)) : 0;
-      obsEl.textContent = `${observedPct.toFixed(2)}%`;
-    }
-    if (pityEl) {
-      const bonus = Math.min((pityCounters[idx]||0) * PITY_STEP * computePityMultiplier(Number(w.percent)||0), PITY_MAX_BONUS);
-      pityEl.textContent = `${bonus.toFixed(2)}%`;
+      const pct = obs.total>0 ? (100 * (obs.counts[idx]||0) / obs.total) : 0;
+      obsEl.textContent = `${pct.toFixed(2)}%`;
     }
   });
-}
-
-/* -------------------- Data loading & UI build -------------------- */
-async function loadData() {
-  try {
-    const res = await fetch('/images.json', { cache: 'no-store' });
-    if (!res.ok) throw new Error('Gagal mengambil data waifu (status ' + res.status + ')');
-    waifus = await res.json();
-
-    waifus = waifus.map((w,i) => ({
-      name: w.name || `Waifu ${i+1}`,
-      url: w.url || '',
-      percent: Number(w.percent) || 0
-    }));
-
-    preloadImages(waifus.map(w => w.url));
-    const total = waifus.reduce((s,w) => s + (Number(w.percent)||0), 0);
-    const normalized = waifus.map(w => ({ ...w, normalizedPercent: total>0 ? (Number(w.percent)/total)*100 : 100/waifus.length }));
-
-    loadStats(waifus.length);
-
-    const list = document.getElementById('rateList');
-    list.innerHTML = `
-      <div class="meta" id="totalPercent">Total percent: ${total.toFixed(2)}% • Rolls: ${totalRolls}</div>
-      <div style="margin-top:6px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-        <button id="normalizeBtn" style="padding:6px 10px; font-size:13px; border-radius:6px; cursor:pointer;">Toggle Normalize View</button>
-        <button id="resetStatsBtn" style="padding:6px 10px; font-size:13px; border-radius:6px; cursor:pointer; background:#444;color:#fff;">Reset Stats</button>
-        <div class="small" style="color:#cfcfcf;">(Normalized = actual chance based on total weights). Observed = actual drop % from rolls. Pity = current bonus added to base %.</div>
-      </div>
-      <div style="height:8px"></div>
-      <div id="rateRows">
-        ${normalized.map((w, idx) => `
-          <div class="rate-item">
-            <div style="display:flex; gap:8px; align-items:center; width:100%; justify-content:space-between;">
-              <div style="display:flex; flex-direction:column; align-items:flex-start;">
-                <span>${escapeHtml(w.name)}</span>
-                <span class="small" style="color:#bdbdbd; margin-top:4px;">
-                  Observed: <span id="observed-${idx}">0.00%</span> • Count: <span id="count-${idx}">0</span> • Pity: <span id="pity-${idx}">0.00%</span>
-                </span>
-              </div>
-              <div style="text-align:right;">
-                <div id="displayPct-${idx}">${Number(w.percent).toFixed(2)}%</div>
-                <div class="small" style="color:#bdbdbd;">(${w.normalizedPercent.toFixed(2)}%)</div>
-              </div>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-    `;
-
-    updateCountersUI();
-
-    // normalize toggle
-    const normalizeBtn = document.getElementById('normalizeBtn');
-    let showingNormalized = false;
-    normalizeBtn.addEventListener('click', () => {
-      showingNormalized = !showingNormalized;
-      waifus.forEach((w, idx) => {
-        const display = document.getElementById(`displayPct-${idx}`);
-        if (!display) return;
-        display.textContent = showingNormalized ? `${normalized[idx].normalizedPercent.toFixed(2)}%` : `${Number(w.percent).toFixed(2)}%`;
-      });
-      normalizeBtn.textContent = showingNormalized ? 'Show Raw Percents' : 'Toggle Normalize View';
-    });
-
-    // reset
-    const resetBtn = document.getElementById('resetStatsBtn');
-    resetBtn.addEventListener('click', () => {
-      if (!confirm('Reset semua statistik (counters, pity, and total rolls)?')) return;
-      resetStats();
-    });
-
-  } catch (err) {
-    console.error(err);
-    alert('Gagal memuat data waifu: ' + err.message + '\nPastikan file public/images.json tersedia dan dijalankan lewat server (bukan file:///).');
+  const totalEl = document.getElementById('totalPercent');
+  if (totalEl) {
+    const totalDefined = waifus.reduce((s,w)=>s+(Number(w.percent)||0),0);
+    totalEl.textContent = `Total percent: ${totalDefined.toFixed(2)}% • Rolls: ${obs.total||0}`;
   }
 }
-
-/* -------------------- Rarity label helper -------------------- */
-function getRarityLabel(percent) {
-  if (isNaN(percent)) return { key: 'common', text: 'Common' };
-  const thresholds = { ur: 0.2, ssr: 1, sr: 3, rare: 6 };
-  if (percent <= thresholds.ur) return { key: 'ur', text: 'UR' };
-  if (percent <= thresholds.ssr) return { key: 'ssr', text: 'SSR' };
-  if (percent <= thresholds.sr) return { key: 'sr', text: 'SR' };
-  if (percent <= thresholds.rare) return { key: 'rare', text: 'Rare' };
-  return { key: 'common', text: 'Common' };
+function incrementObserved(idx){
+  const obs = loadObserved();
+  if (!Array.isArray(obs.counts) || obs.counts.length !== waifus.length) obs.counts = new Array(waifus.length).fill(0);
+  obs.counts[idx] = (obs.counts[idx]||0) + 1;
+  obs.total = (obs.total||0) + 1;
+  saveObserved(obs);
+  refreshObservedFromStorage();
 }
 
-function showRarityLabel(rarityObj) {
-  let label = document.getElementById('rarity-label');
+/* -------------------- last pick storage -------------------- */
+function saveLastPick(picked){
+  try { localStorage.setItem(LAST_KEY, JSON.stringify(picked)); } catch(e){}
+}
+function loadLastPick(){
+  try { const raw = localStorage.getItem(LAST_KEY); return raw ? JSON.parse(raw) : null; } catch(e){ return null; }
+}
+function showLastPickIfAny(){
+  const last = loadLastPick();
+  if (!last) return;
   const resultDiv = document.getElementById('result');
-  let content = document.getElementById('resultContent');
-  if (!content) {
-    content = document.createElement('div'); content.id = 'resultContent';
-    while (resultDiv.firstChild) {
-      if (resultDiv.firstChild.id === 'rarity-label') break;
-      content.appendChild(resultDiv.firstChild);
-    }
-    resultDiv.appendChild(content);
-  }
-  if (!label) {
-    label = document.createElement('div'); label.id = 'rarity-label'; label.className = 'rarity-label';
-    resultDiv.insertBefore(label, content);
-  }
-  const txt = rarityObj.text || 'Common'; const key = rarityObj.key || 'common';
-  const iconText = key === 'ssr' ? '★' : (key === 'rare' ? '✦' : '•');
-  label.className = `rarity-label rarity-${key} show`;
-  label.innerHTML = `
-    <div class="badge">
-      <span class="icon">${iconText}</span>
-      <span class="text">${txt}</span>
-    </div>
-    <span class="subtitle small">${key.toUpperCase()}</span>
-  `;
-  setTimeout(() => label.classList.add('settled'), 420);
+  if (!resultDiv) return;
+  resultDiv.innerHTML = `<h2>(Terakhir) ${escapeHtml(last.name)}</h2>`;
+  resultDiv.appendChild(createImageElement(last.url, last.name));
 }
 
-/* -------------------- Roll logic (with pity) -------------------- */
-async function rollGacha() {
+/* -------------------- Gacha roll logic (visuals + increment observed) -------------------- */
+async function rollGacha(){
   if (isRolling) return;
-  if (!waifus.length) return alert('Data waifu belum dimuat!');
+  if (!waifus.length) { alert('Data waifu belum dimuat!'); return; }
   isRolling = true;
-  const btn = document.getElementById('rollBtn'); if (btn) btn.disabled = true;
-
+  const btn = document.getElementById('rollBtn'); 
+  if (btn) btn.disabled = true;
   const resultDiv = document.getElementById('result');
-  let content = document.getElementById('resultContent');
-  if (!content) {
-    content = document.createElement('div'); content.id = 'resultContent';
-    while (resultDiv.firstChild) content.appendChild(resultDiv.firstChild);
-    resultDiv.appendChild(content);
-  }
+  if (!resultDiv) { if (btn) btn.disabled = false; isRolling = false; return; }
+  resultDiv.innerHTML = `<h2>🎰 Rolling...</h2>`;
 
-  content.innerHTML = `<h2>🎰 Rolling...</h2>`;
-  const spinCount = 12;
-  for (let i=0; i<spinCount; i++) {
-    const random = waifus[Math.floor(Math.random() * waifus.length)];
-    content.innerHTML = `<h3 class="small">🎲 ...</h3>`;
-    const img = createImageElement(random.url, random.name);
-    content.appendChild(img);
-    try { playPopSound(0.18); } catch(e){}
+  // animasi preview
+  const spin = 10;
+  for (let i=0;i<spin;i++){
+    const r = pickByPercent(waifus);
+    resultDiv.innerHTML = `<h3 class="small">🎲 ...</h3>`;
+    const img = createImageElement(r.url, r.name);
+    resultDiv.appendChild(img);
+    try { playPopSound(); } catch(e){}
     img.style.transform = 'scale(0.96)';
-    await new Promise(r => setTimeout(r, 40 + i*30));
+    await new Promise(rp=>setTimeout(rp, 50 + i*25));
     img.style.transform = 'scale(1)';
   }
 
-  const picked = pickByPercentWithPity(waifus, pityCounters);
+  // hasil final
+  const picked = pickByPercent(waifus);
+  resultDiv.innerHTML = `<h2>${escapeHtml(picked.name)}</h2>`;
+  resultDiv.appendChild(createImageElement(picked.url, picked.name));
 
-  // update stats
-  totalRolls = (totalRolls || 0) + 1;
-  const pickedIndex = waifus.findIndex(w => w.url === picked.url);
-  if (pickedIndex >= 0) {
-    counters[pickedIndex] = (counters[pickedIndex] || 0) + 1;
-    // reset picked pity, increment others
-    pityCounters = pityCounters.map((v, idx) => idx === pickedIndex ? 0 : (Number(v||0)+1));
-    saveStats();
-    updateCountersUI();
-  }
+  // hapus kelas rarity lama & set yang baru
+  const rarityClasses = ['rarity-ur','rarity-ssr','rarity-sr','rarity-rare','rarity-common'];
+  resultDiv.classList.remove(...rarityClasses);
+  if (picked.percent <= 0.5) resultDiv.classList.add('rarity-ur');
+  else if (picked.percent <= 1) resultDiv.classList.add('rarity-ssr');
+  else if (picked.percent <= 5) resultDiv.classList.add('rarity-sr');
+  else if (picked.percent <= 15) resultDiv.classList.add('rarity-rare');
+  else resultDiv.classList.add('rarity-common');
 
-  const rarity = getRarityLabel(picked.percent);
-  showRarityLabel(rarity);
+  // efek suara & confetti
+  try { playPopSound(); } catch(e){}
+  launchConfetti(picked.percent <= 1 ? 220 : (picked.percent <= 5 ? 120 : 60));
 
-  await new Promise(r => setTimeout(r, 520));
-
-  content.innerHTML = `<h2>${escapeHtml(picked.name)}</h2>`;
-  const finalImg = createImageElement(picked.url, picked.name);
-  content.appendChild(finalImg);
-
-  try{
-    if (rarity.key === 'ur') { playPopSound(1.2); setTimeout(()=>playPopSound(0.9),90); }
-    else if (rarity.key === 'ssr') { playPopSound(1.0); setTimeout(()=>playPopSound(0.7),80); }
-    else if (rarity.key === 'sr') playPopSound(0.9);
-    else if (rarity.key === 'rare') playPopSound(0.7);
-    else playPopSound(0.45);
-  } catch(e){}
-
-  finalImg.style.transform = 'scale(0.92)';
-  setTimeout(()=>finalImg.style.transform='scale(1)',120);
-
-  // confetti scaled by rarity
-  if (rarity.key === 'ur') launchConfetti(300,3800);
-  else if (rarity.key === 'ssr') launchConfetti(220,3500);
-  else if (rarity.key === 'sr') launchConfetti(160,3000);
-  else if (rarity.key === 'rare') launchConfetti(110,2400);
-  else launchConfetti(60,1800);
+  // counter & last pick
+  const idx = waifus.findIndex(w=>w.url === picked.url);
+  if (idx >= 0) incrementObserved(idx);
+  saveLastPick({ name: picked.name, url: picked.url, ts: Date.now(), percent: picked.percent });
 
   if (btn) btn.disabled = false;
   isRolling = false;
 }
 
-/* -------------------- Event bindings & init -------------------- */
-document.addEventListener('DOMContentLoaded', () => {
-  loadData();
+
+/* -------------------- Router (SPA nav) -------------------- */
+function initNav(){
+  document.querySelectorAll('.nav-btn').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      const target = b.dataset.target;
+      document.querySelectorAll('.page').forEach(p=> p.classList.add('hidden'));
+      const sec = document.getElementById(target);
+      if (sec) sec.classList.remove('hidden');
+    });
+  });
+}
+
+/* -------------------- Optional Google Sign-In stub -------------------- */
+function initGoogleStub(){
+  const btn = document.getElementById('googleSignBtn');
+  if (!btn) return;
+  btn.addEventListener('click', ()=>{
+    alert('Google Sign-In belum dikonfigurasi. Untuk mengaktifkan, dapatkan Client ID di Google Cloud Console dan implementasikan OAuth di script.js (ada stub).');
+  });
+}
+
+/* -------------------- optional reset helpers (if you add buttons in HTML) -------------------- */
+function resetObserved(){
+  try { localStorage.removeItem(OBS_KEY); refreshObservedFromStorage(); } catch(e){}
+}
+function resetComments(){
+  try { localStorage.removeItem(COMMENTS_KEY); renderComments(); } catch(e){}
+}
+
+/* -------------------- Init on DOM ready -------------------- */
+document.addEventListener('DOMContentLoaded', ()=>{
+  initNav();
+  initCommentForm();
+  initGoogleStub();
+
   const rollBtn = document.getElementById('rollBtn');
   if (rollBtn) rollBtn.addEventListener('click', rollGacha);
-  document.addEventListener('keydown', (e) => { if (e.key.toLowerCase() === 'r') rollGacha(); });
+  document.addEventListener('keydown', e => { if (e.key.toLowerCase()==='r') rollGacha(); });
+
+  // optional reset buttons
+  const ro = document.getElementById('resetObservedBtn');
+  if (ro) ro.addEventListener('click', ()=> { if(confirm('Reset observed counters?')) resetObserved(); });
+  const rc = document.getElementById('resetCommentsBtn');
+  if (rc) rc.addEventListener('click', ()=> { if(confirm('Reset comments?')) resetComments(); });
+
+  loadData();
 });
