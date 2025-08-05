@@ -2,51 +2,51 @@
   {
     "name": "Waifu 1",
     "url": "https://i.imgur.com/53m3Fo5.png",
-    "weight": 1
+    "percent": 1.82
   },
   {
     "name": "Waifu 2",
     "url": "https://i.imgur.com/z6cr3r7.jpeg",
-    "weight": 2
+    "percent": 3.64
   },
   {
     "name": "Waifu 3",
     "url": "https://i.imgur.com/nLw2W6q.png",
-    "weight": 3
+    "percent": 5.45
   },
   {
     "name": "Waifu 4",
     "url": "https://i.imgur.com/q8aaL5O.jpeg",
-    "weight": 4
+    "percent": 7.27
   },
   {
     "name": "Waifu 5",
     "url": "https://i.imgur.com/aORSyrQ.png",
-    "weight": 5
+    "percent": 9.09
   },
   {
     "name": "Waifu 6",
     "url": "https://i.imgur.com/bvpdQzE.png",
-    "weight": 6
+    "percent": 10.91
   },
   {
     "name": "Waifu 7",
     "url": "https://i.imgur.com/9SyRoyJ.jpeg",
-    "weight": 7
+    "percent": 12.73
   },
   {
     "name": "Waifu 8",
     "url": "https://i.imgur.com/TzKVZwD.png",
-    "weight": 8
+    "percent": 14.55
   },
   {
     "name": "Waifu 9",
     "url": "https://i.imgur.com/irqpoIz.png",
-    "weight": 9
+    "percent": 16.36
   },
   {
     "name": "Waifu 10",
     "url": "https://i.imgur.com/h8MWP12.png",
-    "weight": 10
+    "percent": 18.18
   }
 ]
