@@ -65,13 +65,11 @@
   <script>
     let waifus = [];
 
-    // Fungsi hitung persen drop rate
     function calcRates(items) {
       const sum = items.reduce((a, b) => a + (b.weight || 0), 0);
       return items.map(w => sum ? (w.weight / sum * 100) : 0);
     }
 
-    // Fungsi ambil waifu acak sesuai weight
     function pickWeighted(items) {
       const total = items.reduce((a, b) => a + (b.weight || 0), 0);
       const rand = Math.random() * total;
@@ -84,13 +82,19 @@
     }
 
     async function loadData() {
-      const res = await fetch('images.json');
-      waifus = await res.json();
-      const rates = calcRates(waifus);
-      const list = document.getElementById("rateList");
-      list.innerHTML = waifus.map((w, i) => 
-        `<div class="rate-item"><span>${w.name}</span><span>${rates[i].toFixed(2)}%</span></div>`
-      ).join('');
+      try {
+        // FIX: di Vercel public/ jadi root, jadi cukup "images.json"
+        const res = await fetch('images.json');
+        if (!res.ok) throw new Error('Gagal mengambil data waifu');
+        waifus = await res.json();
+        const rates = calcRates(waifus);
+        const list = document.getElementById("rateList");
+        list.innerHTML = waifus.map((w, i) => 
+          `<div class="rate-item"><span>${w.name}</span><span>${rates[i].toFixed(2)}%</span></div>`
+        ).join('');
+      } catch (err) {
+        alert("Gagal memuat data waifu: " + err.message);
+      }
     }
 
     document.getElementById("rollBtn").addEventListener("click", () => {
