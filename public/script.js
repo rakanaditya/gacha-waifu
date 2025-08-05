@@ -1,20 +1,20 @@
-// public/script.js (full — replace existing file)
+// public/script.js (final, with per-waifu pity + stats)
+// Replace your existing public/script.js with this file.
+
 let waifus = [];
 let isRolling = false;
 
-/* -------------------- pickByPercent & util -------------------- */
-function pickByPercent(items) {
-  const totalPercent = items.reduce((sum, item) => sum + (Number(item.percent) || 0), 0);
-  if (totalPercent <= 0) return items[Math.floor(Math.random() * items.length)];
-  const rand = Math.random() * totalPercent;
-  let acc = 0;
-  for (const item of items) {
-    acc += Number(item.percent) || 0;
-    if (rand <= acc) return item;
-  }
-  return items[items.length - 1];
-}
+/* -------------------- Pity config (tweak if needed) -------------------- */
+const PITY_STEP = 0.2;       // percent added per failed roll for that waifu
+const PITY_MAX_BONUS = 50;  // maximum percent bonus from pity (absolute)
 
+/* -------------------- Storage keys & stats -------------------- */
+const STORAGE_KEY = 'gacha_stats_v1';
+let counters = [];      // observed counts
+let totalRolls = 0;
+let pityCounters = [];  // number of consecutive failed rolls per waifu
+
+/* -------------------- Utilities -------------------- */
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, m => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -44,7 +44,10 @@ function preloadImages(urls) {
   });
 }
 
-/* -------------------- Confetti System -------------------- */
+/* -------------------- Confetti & sound (unchanged) -------------------- */
+// ... (confetti and playPopSound functions are identical to your previous file)
+// For brevity we include them directly here:
+
 function createConfettiCanvas() {
   let canvas = document.getElementById('confetti-canvas');
   if (canvas) return canvas;
@@ -139,7 +142,6 @@ function launchConfetti(particleCount = 60, duration = 2500) {
   rafId = requestAnimationFrame(draw);
 }
 
-/* -------------------- Pop sound (Web Audio) -------------------- */
 let audioCtx = null;
 function ensureAudioCtx() {
   if (!audioCtx) {
@@ -151,7 +153,6 @@ function playPopSound(intensity = 1) {
   ensureAudioCtx();
   const ctx = audioCtx;
   const now = ctx.currentTime;
-
   const bufferSize = 0.1 * ctx.sampleRate;
   const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
   const data = buffer.getChannelData(0);
@@ -160,14 +161,11 @@ function playPopSound(intensity = 1) {
   }
   const noise = ctx.createBufferSource();
   noise.buffer = buffer;
-
   const noiseGain = ctx.createGain();
   noiseGain.gain.setValueAtTime(0.001 * intensity, now);
   noiseGain.gain.exponentialRampToValueAtTime(0.16 * intensity, now + 0.004);
   noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
-
   noise.connect(noiseGain).connect(ctx.destination);
-
   const osc = ctx.createOscillator();
   const oscGain = ctx.createGain();
   osc.type = 'sine';
@@ -175,55 +173,76 @@ function playPopSound(intensity = 1) {
   oscGain.gain.setValueAtTime(0.0008 * intensity, now);
   oscGain.gain.exponentialRampToValueAtTime(0.12 * intensity, now + 0.006);
   oscGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
-
   osc.connect(oscGain).connect(ctx.destination);
-
   noise.start(now);
   osc.start(now);
   noise.stop(now + 0.18);
   osc.stop(now + 0.18);
 }
 
-/* -------------------- Counters / localStorage stats -------------------- */
-const STORAGE_KEY = 'gacha_stats_v1';
-let counters = [];   // int array aligned with waifus
-let totalRolls = 0;
-
-function loadCounters(waifusLength) {
+/* -------------------- Storage load/save (counters + pity) -------------------- */
+function loadStats(waifusLength) {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed.counters) && parsed.counters.length === waifusLength) {
         counters = parsed.counters.map(n => Number(n) || 0);
-        totalRolls = Number(parsed.totalRolls) || counters.reduce((s, v) => s + v, 0);
+        pityCounters = Array.isArray(parsed.pityCounters) && parsed.pityCounters.length === waifusLength
+          ? parsed.pityCounters.map(n => Number(n) || 0)
+          : new Array(waifusLength).fill(0);
+        totalRolls = Number(parsed.totalRolls) || counters.reduce((s,v) => s+v, 0);
         return;
       }
     }
   } catch (e) {
-    // ignore parse errors
+    // ignore
   }
   counters = new Array(waifusLength).fill(0);
+  pityCounters = new Array(waifusLength).fill(0);
   totalRolls = 0;
-  saveCounters();
+  saveStats();
 }
 
-function saveCounters() {
+function saveStats() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ counters, totalRolls }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ counters, totalRolls, pityCounters }));
   } catch (e) {
-    console.warn('Could not save gacha stats to localStorage', e);
+    console.warn('Could not save stats to localStorage', e);
   }
 }
 
-function resetCounters() {
+function resetStats() {
   counters = new Array(waifus.length).fill(0);
+  pityCounters = new Array(waifus.length).fill(0);
   totalRolls = 0;
-  saveCounters();
+  saveStats();
   updateCountersUI();
 }
 
-/* -------------------- Update counters UI (observed percents) -------------------- */
+/* -------------------- Effective pick with pity -------------------- */
+function pickByPercentWithPity(items, pityArr) {
+  // build effective percents
+  const adjusted = items.map((it, idx) => {
+    const base = Number(it.percent) || 0;
+    const bonus = (pityArr[idx] || 0) * PITY_STEP;
+    const effective = Math.min(base + bonus, base + PITY_MAX_BONUS);
+    return { ...it, effectivePercent: effective };
+  });
+
+  const totalEffective = adjusted.reduce((s, a) => s + a.effectivePercent, 0);
+  if (totalEffective <= 0) return items[Math.floor(Math.random() * items.length)];
+
+  const rand = Math.random() * totalEffective;
+  let acc = 0;
+  for (const a of adjusted) {
+    acc += a.effectivePercent;
+    if (rand <= acc) return a;
+  }
+  return adjusted[adjusted.length - 1];
+}
+
+/* -------------------- Update counters UI (observed pct + pity) -------------------- */
 function updateCountersUI() {
   const totalEl = document.getElementById('totalPercent');
   if (totalEl) {
@@ -234,77 +253,72 @@ function updateCountersUI() {
   waifus.forEach((w, idx) => {
     const countEl = document.getElementById(`count-${idx}`);
     const obsEl = document.getElementById(`observed-${idx}`);
+    const pityEl = document.getElementById(`pity-${idx}`);
     if (countEl) countEl.textContent = String(counters[idx] || 0);
     if (obsEl) {
       const observedPct = totalRolls > 0 ? (100 * (Number(counters[idx] || 0) / totalRolls)) : 0;
       obsEl.textContent = `${observedPct.toFixed(2)}%`;
     }
+    if (pityEl) {
+      const bonus = Math.min((pityCounters[idx] || 0) * PITY_STEP, PITY_MAX_BONUS);
+      pityEl.textContent = `${bonus.toFixed(2)}%`;
+    }
   });
 }
 
-/* -------------------- Data loading (with normalize UI & counters) -------------------- */
+/* -------------------- Data loading & UI build -------------------- */
 async function loadData() {
   try {
-    const res = await fetch('/images.json', { cache: "no-store" });
+    const res = await fetch('/images.json', { cache: 'no-store' });
     if (!res.ok) throw new Error('Gagal mengambil data waifu (status ' + res.status + ')');
     waifus = await res.json();
 
-    // sanitize & ensure numbers
-    waifus = waifus.map((w, i) => ({
-      name: w.name || `Waifu ${i + 1}`,
+    waifus = waifus.map((w,i) => ({
+      name: w.name || `Waifu ${i+1}`,
       url: w.url || '',
       percent: Number(w.percent) || 0
     }));
 
-    // Preload images for smooth animation
     preloadImages(waifus.map(w => w.url));
 
-    // compute total percent
-    const total = waifus.reduce((s, w) => s + (Number(w.percent) || 0), 0);
-
-    // compute normalized chance (relative %) for display
+    const total = waifus.reduce((s,w) => s + (Number(w.percent)||0), 0);
     const normalized = waifus.map(w => {
-      const rel = (total > 0) ? (Number(w.percent) / total) * 100 : (100 / waifus.length);
-      return {
-        ...w,
-        normalizedPercent: rel
-      };
+      const rel = total > 0 ? (Number(w.percent)/total)*100 : 100/waifus.length;
+      return { ...w, normalizedPercent: rel };
     });
 
-    // init/load counters from localStorage
-    loadCounters(waifus.length);
+    // load stats (counters + pity)
+    loadStats(waifus.length);
 
-    // build UI: total, normalize toggle, reset stats button, and rows showing both defined percent and actual chance
-    const list = document.getElementById("rateList");
+    const list = document.getElementById('rateList');
     list.innerHTML = `
       <div class="meta" id="totalPercent">Total percent: ${total.toFixed(2)}% • Rolls: ${totalRolls}</div>
       <div style="margin-top:6px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
         <button id="normalizeBtn" style="padding:6px 10px; font-size:13px; border-radius:6px; cursor:pointer;">Toggle Normalize View</button>
         <button id="resetStatsBtn" style="padding:6px 10px; font-size:13px; border-radius:6px; cursor:pointer; background:#444;color:#fff;">Reset Stats</button>
-        <div class="small" style="color:#cfcfcf;">(Normalized = actual chance based on total weights). Observed = actual drop % from rolls.</div>
+        <div class="small" style="color:#cfcfcf;">(Normalized = actual chance based on total weights). Observed = actual drop % from rolls. Pity = current bonus added to base %.</div>
       </div>
       <div style="height:8px"></div>
       <div id="rateRows">
-        ${normalized.map((w, idx) => 
-          `<div class="rate-item">
-             <div style="display:flex; gap:8px; align-items:center; width:100%; justify-content:space-between;">
-               <div style="display:flex; flex-direction:column; align-items:flex-start;">
-                 <span>${escapeHtml(w.name)}</span>
-                 <span class="small" style="color:#bdbdbd; margin-top:4px;">
-                   Observed: <span id="observed-${idx}">0.00%</span> • Count: <span id="count-${idx}">0</span>
-                 </span>
-               </div>
-               <div style="text-align:right;">
-                 <div id="displayPct-${idx}">${Number(w.percent).toFixed(2)}%</div>
-                 <div class="small" style="color:#bdbdbd;">(${w.normalizedPercent.toFixed(2)}%)</div>
-               </div>
-             </div>
-           </div>`
-        ).join('')}
+        ${normalized.map((w, idx) => `
+          <div class="rate-item">
+            <div style="display:flex; gap:8px; align-items:center; width:100%; justify-content:space-between;">
+              <div style="display:flex; flex-direction:column; align-items:flex-start;">
+                <span>${escapeHtml(w.name)}</span>
+                <span class="small" style="color:#bdbdbd; margin-top:4px;">
+                  Observed: <span id="observed-${idx}">0.00%</span> • Count: <span id="count-${idx}">0</span> • Pity: <span id="pity-${idx}">0.00%</span>
+                </span>
+              </div>
+              <div style="text-align:right;">
+                <div id="displayPct-${idx}">${Number(w.percent).toFixed(2)}%</div>
+                <div class="small" style="color:#bdbdbd;">(${w.normalizedPercent.toFixed(2)}%)</div>
+              </div>
+            </div>
+          </div>
+        `).join('')}
       </div>
     `;
 
-    // set initial observed counts based on loaded counters
     updateCountersUI();
 
     // normalize toggle
@@ -314,9 +328,8 @@ async function loadData() {
       showingNormalized = !showingNormalized;
       waifus.forEach((w, idx) => {
         const display = document.getElementById(`displayPct-${idx}`);
-        if (display) {
-          display.textContent = showingNormalized ? `${normalized[idx].normalizedPercent.toFixed(2)}%` : `${Number(w.percent).toFixed(2)}%`;
-        }
+        if (!display) return;
+        display.textContent = showingNormalized ? `${normalized[idx].normalizedPercent.toFixed(2)}%` : `${Number(w.percent).toFixed(2)}%`;
       });
       normalizeBtn.textContent = showingNormalized ? 'Show Raw Percents' : 'Toggle Normalize View';
     });
@@ -324,27 +337,20 @@ async function loadData() {
     // reset button
     const resetBtn = document.getElementById('resetStatsBtn');
     resetBtn.addEventListener('click', () => {
-      if (!confirm('Reset semua statistik (counters dan total rolls)?')) return;
-      resetCounters();
+      if (!confirm('Reset semua statistik (counters, pity, and total rolls)?')) return;
+      resetStats();
     });
 
   } catch (err) {
     console.error(err);
-    alert("Gagal memuat data waifu: " + err.message + "\nPastikan file public/images.json tersedia dan dijalankan lewat server (bukan file:///)"); 
+    alert('Gagal memuat data waifu: ' + err.message + '\\nPastikan file public/images.json tersedia dan dijalankan lewat server (bukan file:///).');
   }
 }
 
 /* -------------------- Rarity label helper -------------------- */
 function getRarityLabel(percent) {
   if (isNaN(percent)) return { key: 'common', text: 'Common' };
-
-  const thresholds = {
-    ur: 0.2,
-    ssr: 1,
-    sr: 3,
-    rare: 6
-  };
-
+  const thresholds = { ur: 0.2, ssr: 1, sr: 3, rare: 6 };
   if (percent <= thresholds.ur) return { key: 'ur', text: 'UR' };
   if (percent <= thresholds.ssr) return { key: 'ssr', text: 'SSR' };
   if (percent <= thresholds.sr) return { key: 'sr', text: 'SR' };
@@ -352,7 +358,6 @@ function getRarityLabel(percent) {
   return { key: 'common', text: 'Common' };
 }
 
-/* showRarityLabel (persistent) */
 function showRarityLabel(rarityObj) {
   let label = document.getElementById('rarity-label');
   const resultDiv = document.getElementById('result');
@@ -390,15 +395,15 @@ function showRarityLabel(rarityObj) {
   setTimeout(() => label.classList.add('settled'), 420);
 }
 
-/* -------------------- Roll logic (increment counters + confetti + sound) -------------------- */
+/* -------------------- Roll logic (with pity increment/reset) -------------------- */
 async function rollGacha() {
   if (isRolling) return;
-  if (!waifus.length) return alert("Data waifu belum dimuat!");
+  if (!waifus.length) return alert('Data waifu belum dimuat!');
   isRolling = true;
-  const btn = document.getElementById("rollBtn");
+  const btn = document.getElementById('rollBtn');
   btn.disabled = true;
 
-  const resultDiv = document.getElementById("result");
+  const resultDiv = document.getElementById('result');
   let content = document.getElementById('resultContent');
   if (!content) {
     content = document.createElement('div');
@@ -415,23 +420,24 @@ async function rollGacha() {
     content.innerHTML = `<h3 class="small">🎲 ...</h3>`;
     const img = createImageElement(random.url, random.name);
     content.appendChild(img);
-
-    try { playPopSound(0.18); } catch (e) { /* ignore if audio blocked */ }
-
+    try { playPopSound(0.18); } catch (e) {}
     img.style.transform = 'scale(0.96)';
     const waitMs = 40 + (i * 30);
     await new Promise(r => setTimeout(r, waitMs));
     img.style.transform = 'scale(1)';
   }
 
-  const picked = pickByPercent(waifus);
+  // pick using pity-adjusted percents
+  const picked = pickByPercentWithPity(waifus, pityCounters);
 
-  // increment counters (persist & update UI)
+  // update stats: increment totalRolls and counters; update pity counters
+  totalRolls = (totalRolls || 0) + 1;
   const pickedIndex = waifus.findIndex(w => w.url === picked.url);
   if (pickedIndex >= 0) {
     counters[pickedIndex] = (counters[pickedIndex] || 0) + 1;
-    totalRolls = (totalRolls || 0) + 1;
-    saveCounters();
+    // reset pity for picked, increment pity for others
+    pityCounters = pityCounters.map((v, idx) => idx === pickedIndex ? 0 : (Number(v||0) + 1));
+    saveStats();
     updateCountersUI();
   }
 
@@ -458,7 +464,7 @@ async function rollGacha() {
     } else {
       playPopSound(0.45);
     }
-  } catch (e) { /* ignore */ }
+  } catch (e) {}
 
   finalImg.style.transform = 'scale(0.92)';
   setTimeout(() => finalImg.style.transform = 'scale(1)', 120);
@@ -480,11 +486,9 @@ async function rollGacha() {
 }
 
 /* -------------------- Event bindings -------------------- */
-document.getElementById("rollBtn").addEventListener("click", rollGacha);
+document.getElementById('rollBtn').addEventListener('click', rollGacha);
 document.addEventListener('keydown', (e) => {
-  if (e.key.toLowerCase() === 'r') {
-    rollGacha();
-  }
+  if (e.key.toLowerCase() === 'r') rollGacha();
 });
 
 /* -------------------- Init -------------------- */
