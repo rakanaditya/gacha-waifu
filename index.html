@@ -84,7 +84,7 @@
     }
 
     async function loadData() {
-      const res = await fetch('public/images.json');
+      const res = await fetch('images.json');
       waifus = await res.json();
       const rates = calcRates(waifus);
       const list = document.getElementById("rateList");
