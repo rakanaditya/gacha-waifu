@@ -65,32 +65,27 @@
   <script>
     let waifus = [];
 
-    function calcRates(items) {
-      const sum = items.reduce((a, b) => a + (b.weight || 0), 0);
-      return items.map(w => sum ? (w.weight / sum * 100) : 0);
-    }
-
-    function pickWeighted(items) {
-      const total = items.reduce((a, b) => a + (b.weight || 0), 0);
-      const rand = Math.random() * total;
+    function pickByPercent(items) {
+      const rand = Math.random() * 100;
       let acc = 0;
       for (const item of items) {
-        acc += item.weight || 0;
+        acc += item.percent || 0;
         if (rand <= acc) return item;
       }
-      return items[items.length - 1];
+      return items[items.length - 1]; // fallback
     }
 
     async function loadData() {
       try {
-        // FIX: di Vercel public/ jadi root, jadi cukup "images.json"
+        // fetch langsung dari public/
         const res = await fetch('images.json');
         if (!res.ok) throw new Error('Gagal mengambil data waifu');
         waifus = await res.json();
-        const rates = calcRates(waifus);
+
+        // Tampilkan rate list
         const list = document.getElementById("rateList");
-        list.innerHTML = waifus.map((w, i) => 
-          `<div class="rate-item"><span>${w.name}</span><span>${rates[i].toFixed(2)}%</span></div>`
+        list.innerHTML = waifus.map(w => 
+          `<div class="rate-item"><span>${w.name}</span><span>${w.percent.toFixed(2)}%</span></div>`
         ).join('');
       } catch (err) {
         alert("Gagal memuat data waifu: " + err.message);
@@ -99,7 +94,7 @@
 
     document.getElementById("rollBtn").addEventListener("click", () => {
       if (!waifus.length) return alert("Data waifu belum dimuat!");
-      const picked = pickWeighted(waifus);
+      const picked = pickByPercent(waifus);
       document.getElementById("result").innerHTML = `
         <h2>${picked.name}</h2>
         <img src="${picked.url}" alt="${picked.name}"/>
