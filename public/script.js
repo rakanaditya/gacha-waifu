@@ -43,10 +43,6 @@ function preloadImages(urls) {
 }
 
 /* -------------------- Confetti System -------------------- */
-/*
-  - Creates a fullscreen canvas and draws particle confetti.
-  - call launchConfetti(count, durationMs)
-*/
 function createConfettiCanvas() {
   let canvas = document.getElementById('confetti-canvas');
   if (canvas) return canvas;
@@ -62,7 +58,6 @@ function createConfettiCanvas() {
     zIndex: 9999,
   });
   document.body.appendChild(canvas);
-  // size the canvas
   function resize() {
     canvas.width = window.innerWidth * devicePixelRatio;
     canvas.height = window.innerHeight * devicePixelRatio;
@@ -82,7 +77,6 @@ function launchConfetti(particleCount = 60, duration = 2500) {
   const H = window.innerHeight;
   const colors = ['#ff4d6d','#ffd166','#06d6a0','#4d6bff','#ff6bcb','#9b5cff'];
 
-  // particle factory
   const particles = [];
   for (let i = 0; i < particleCount; i++) {
     const size = Math.random() * 10 + 6;
@@ -107,8 +101,7 @@ function launchConfetti(particleCount = 60, duration = 2500) {
     const elapsed = now - start;
     ctx.clearRect(0, 0, W, H);
     for (let p of particles) {
-      // simple physics
-      p.vy += 0.05; // gravity
+      p.vy += 0.05;
       p.x += p.vx;
       p.y += p.vy;
       p.rot += p.vrot;
@@ -127,7 +120,6 @@ function launchConfetti(particleCount = 60, duration = 2500) {
       ctx.restore();
     }
 
-    // fade out near the end
     const t = Math.min(1, elapsed / duration);
     if (t > 0.85) {
       ctx.fillStyle = `rgba(0,0,0,${(t-0.85)/0.15})`;
@@ -143,6 +135,55 @@ function launchConfetti(particleCount = 60, duration = 2500) {
   }
 
   rafId = requestAnimationFrame(draw);
+}
+
+/* -------------------- Pop sound (Web Audio) -------------------- */
+let audioCtx = null;
+function ensureAudioCtx() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+}
+
+function playPopSound(intensity = 1) {
+  // intensity: multiplier for volume / complexity (1 = normal)
+  ensureAudioCtx();
+  const ctx = audioCtx;
+  const now = ctx.currentTime;
+
+  // small noise burst for "pop"
+  const bufferSize = 0.1 * ctx.sampleRate;
+  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    // white noise shaped by exponential decay
+    data[i] = (Math.random() * 2 - 1) * Math.exp(-5 * i / bufferSize);
+  }
+  const noise = ctx.createBufferSource();
+  noise.buffer = buffer;
+
+  const noiseGain = ctx.createGain();
+  noiseGain.gain.setValueAtTime(0.001 * intensity, now);
+  noiseGain.gain.exponentialRampToValueAtTime(0.16 * intensity, now + 0.004);
+  noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+
+  noise.connect(noiseGain).connect(ctx.destination);
+
+  // click/low pitch tone for body
+  const osc = ctx.createOscillator();
+  const oscGain = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(300 * (1 + Math.random()*0.5), now);
+  oscGain.gain.setValueAtTime(0.0008 * intensity, now);
+  oscGain.gain.exponentialRampToValueAtTime(0.12 * intensity, now + 0.006);
+  oscGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+
+  osc.connect(oscGain).connect(ctx.destination);
+
+  noise.start(now);
+  osc.start(now);
+  noise.stop(now + 0.18);
+  osc.stop(now + 0.18);
 }
 
 /* -------------------- Data loading -------------------- */
@@ -175,7 +216,45 @@ async function loadData() {
   }
 }
 
-/* -------------------- Roll logic (memanggil confetti) -------------------- */
+/* -------------------- Rarity label helper -------------------- */
+function getRarityLabel(percent) {
+  if (isNaN(percent)) return { key: 'common', text: 'Common' };
+  if (percent <= 1) return { key: 'ssr', text: 'SSR' };
+  if (percent <= 5) return { key: 'rare', text: 'Rare' };
+  return { key: 'common', text: 'Common' };
+}
+
+function showRarityLabel(rarityObj) {
+  // create or reuse label element
+  let label = document.getElementById('rarity-label');
+  if (!label) {
+    label = document.createElement('div');
+    label.id = 'rarity-label';
+    label.className = 'rarity-label hidden';
+    const resultDiv = document.getElementById('result');
+    // insert at the top of resultDiv
+    resultDiv.insertBefore(label, resultDiv.firstChild);
+  }
+  // set text & class
+  label.textContent = rarityObj.text;
+  label.className = `rarity-label hidden rarity-${rarityObj.key}`;
+
+  // trigger entrance
+  requestAnimationFrame(() => {
+    label.classList.remove('hidden');
+  });
+
+  // auto-hide after 1.4s
+  setTimeout(() => {
+    label.classList.add('hidden');
+    // remove after transition (safe)
+    setTimeout(() => {
+      if (label && label.parentElement) label.remove();
+    }, 300);
+  }, 1400);
+}
+
+/* -------------------- Roll logic (memanggil confetti + sound + label) -------------------- */
 async function rollGacha() {
   if (isRolling) return;
   if (!waifus.length) return alert("Data waifu belum dimuat!");
@@ -192,6 +271,10 @@ async function rollGacha() {
     resultDiv.innerHTML = `<h3 class="small">🎲 ...</h3>`;
     const img = createImageElement(random.url, random.name);
     resultDiv.appendChild(img);
+
+    // small pop during spin for tactile feel (low intensity)
+    try { playPopSound(0.18); } catch (e) { /* ignore if audio blocked */ }
+
     img.style.transform = 'scale(0.96)';
     const waitMs = 40 + (i * 30);
     await new Promise(r => setTimeout(r, waitMs));
@@ -199,19 +282,42 @@ async function rollGacha() {
   }
 
   const picked = pickByPercent(waifus);
+
+  // show rarity label
+  const rarity = getRarityLabel(picked.percent);
+  showRarityLabel(rarity);
+
+  // small delay so label is visible before final reveal
+  await new Promise(r => setTimeout(r, 520));
+
   resultDiv.innerHTML = `<h2>${escapeHtml(picked.name)}</h2>`;
   const finalImg = createImageElement(picked.url, picked.name);
   resultDiv.appendChild(finalImg);
 
+  // bigger pop(s) for final reveal
+  try {
+    if (rarity.key === 'ssr') {
+      playPopSound(1.0);
+      setTimeout(() => playPopSound(0.7), 80);
+    } else if (rarity.key === 'rare') {
+      playPopSound(0.7);
+    } else {
+      playPopSound(0.45);
+    }
+  } catch (e) {
+    /* audio may be blocked until user interaction; ignore */
+  }
+
   finalImg.style.transform = 'scale(0.92)';
   setTimeout(() => finalImg.style.transform = 'scale(1)', 120);
 
-  // confetti intensity: lebih banyak jika percent <= 5 (langka)
-  const rarityThreshold = 5;
-  if (!isNaN(picked.percent) && picked.percent <= rarityThreshold) {
-    launchConfetti(160, 3000); // besar & lama untuk rare
+  // confetti intensity by rarity
+  if (rarity.key === 'ssr') {
+    launchConfetti(220, 3500);
+  } else if (rarity.key === 'rare') {
+    launchConfetti(140, 3000);
   } else {
-    launchConfetti(60, 2000); // biasa
+    launchConfetti(60, 2000);
   }
 
   btn.disabled = false;
