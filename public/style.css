@@ -66,17 +66,22 @@ img {
   color: #bdbdbd;
 }
 
-/* ----- Big rarity badge (glow + flip/scale animation) ----- */
+/* ----- Persistent big rarity badge (fixed under image) ----- */
 .rarity-label {
   position: relative;
-  display: inline-block;
-  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   pointer-events: none;
+  margin-top: 10px;
 }
 
-/* container yang muncul di tengah area result */
+/* container badge */
 .rarity-label .badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   padding: 12px 22px;
   border-radius: 999px;
   font-weight: 800;
@@ -85,79 +90,55 @@ img {
   color: white;
   transform-origin: center;
   box-shadow: 0 10px 30px rgba(0,0,0,0.45);
-  text-shadow: 0 6px 18px rgba(0,0,0,0.45);
-  will-change: transform, opacity;
   opacity: 0;
-  transform: perspective(800px) rotateX(30deg) scale(0.85);
+  transform: perspective(800px) rotateX(30deg) scale(0.92);
   transition: opacity 260ms cubic-bezier(.2,.9,.2,1), transform 420ms cubic-bezier(.2,.9,.2,1), filter 300ms;
   border: 1px solid rgba(255,255,255,0.06);
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
 }
 
-/* small icon circle left */
+/* icon left */
 .rarity-label .badge .icon {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: rgba(255,255,255,0.12);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
   font-size: 14px;
   color: rgba(255,255,255,0.95);
-  box-shadow: 0 6px 18px rgba(0,0,0,0.35), inset 0 -4px 12px rgba(255,255,255,0.03);
+  background: rgba(255,255,255,0.08);
 }
 
-/* visible state: flip in + pop */
+/* visible state */
 .rarity-label.show .badge {
   opacity: 1;
   transform: perspective(800px) rotateX(0deg) scale(1.06);
   filter: drop-shadow(0 12px 30px rgba(0,0,0,0.55));
 }
 
-/* settle back to natural size */
-.rarity-label.show .badge.settled {
+/* settle */
+.rarity-label.settled .badge {
   transform: perspective(800px) rotateX(0deg) scale(1);
   transition: transform 350ms cubic-bezier(.2,.9,.2,1);
 }
 
-/* hidden state (exit) */
-.rarity-label.hide .badge {
-  opacity: 0;
-  transform: perspective(800px) rotateX(20deg) scale(0.88);
-}
-
-/* Rarity colors / glow */
+/* colors */
 .rarity-ssr .badge {
   background: linear-gradient(90deg,#ffd700,#ffb84d);
   color: #2b1f00;
-  box-shadow: 0 16px 40px rgba(255,190,0,0.18), 0 6px 20px rgba(0,0,0,0.5);
-  text-shadow: 0 8px 24px rgba(0,0,0,0.45);
 }
-.rarity-ssr .badge .icon { background: rgba(255,255,255,0.18); color: #2b1f00; }
-
-/* rare */
 .rarity-rare .badge {
   background: linear-gradient(90deg,#a78bfa,#7c3aed);
   color: #fff;
-  box-shadow: 0 14px 36px rgba(124,58,237,0.12);
 }
-.rarity-rare .badge .icon { background: rgba(255,255,255,0.08); }
-
-/* common */
 .rarity-common .badge {
   background: linear-gradient(90deg,#6b7280,#374151);
   color: #fff;
-  box-shadow: 0 8px 22px rgba(0,0,0,0.35);
 }
-.rarity-common .badge .icon { background: rgba(255,255,255,0.04); }
 
-/* small label subtitle under badge (optional) */
+/* subtitle below badge (optional) */
 .rarity-label .subtitle {
-  display: block;
   margin-top: 8px;
   font-size: 12px;
   color: #d1d5db;
@@ -166,6 +147,10 @@ img {
 
 /* responsive tweak */
 @media (max-width: 420px) {
+  .rarity-label .badge { padding: 10px 14px; font-size: 16px; gap:8px; }
+  .rarity-label .badge .icon { width:28px; height:28px; font-size:12px; }
+}
+
   .rarity-label .badge { padding: 10px 14px; font-size: 16px; gap:8px; }
   .rarity-label .badge .icon { width:28px; height:28px; font-size:12px; }
 }
