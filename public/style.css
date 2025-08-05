@@ -77,7 +77,7 @@ img {
   margin-top: 10px;
 }
 
-/* container badge */
+/* Container badge */
 .rarity-label .badge {
   display: inline-flex;
   align-items: center;
@@ -87,16 +87,17 @@ img {
   font-weight: 800;
   font-size: 20px;
   letter-spacing: 0.6px;
-  color: white;
   transform-origin: center;
   box-shadow: 0 10px 30px rgba(0,0,0,0.45);
   opacity: 0;
   transform: perspective(800px) rotateX(30deg) scale(0.92);
-  transition: opacity 260ms cubic-bezier(.2,.9,.2,1), transform 420ms cubic-bezier(.2,.9,.2,1), filter 300ms;
+  transition: opacity 260ms cubic-bezier(.2,.9,.2,1),
+              transform 420ms cubic-bezier(.2,.9,.2,1),
+              filter 300ms;
   border: 1px solid rgba(255,255,255,0.06);
 }
 
-/* icon left */
+/* Icon left */
 .rarity-label .badge .icon {
   width: 34px;
   height: 34px;
@@ -110,34 +111,20 @@ img {
   background: rgba(255,255,255,0.08);
 }
 
-/* visible state */
+/* Visible state */
 .rarity-label.show .badge {
   opacity: 1;
   transform: perspective(800px) rotateX(0deg) scale(1.06);
   filter: drop-shadow(0 12px 30px rgba(0,0,0,0.55));
 }
 
-/* settle */
+/* Settle */
 .rarity-label.settled .badge {
   transform: perspective(800px) rotateX(0deg) scale(1);
   transition: transform 350ms cubic-bezier(.2,.9,.2,1);
 }
 
-/* colors */
-.rarity-ssr .badge {
-  background: linear-gradient(90deg,#ffd700,#ffb84d);
-  color: #2b1f00;
-}
-.rarity-rare .badge {
-  background: linear-gradient(90deg,#a78bfa,#7c3aed);
-  color: #fff;
-}
-.rarity-common .badge {
-  background: linear-gradient(90deg,#6b7280,#374151);
-  color: #fff;
-}
-
-/* subtitle below badge (optional) */
+/* Subtitle below badge (optional) */
 .rarity-label .subtitle {
   margin-top: 8px;
   font-size: 12px;
@@ -145,15 +132,20 @@ img {
   opacity: 0.9;
 }
 
+/* --- Rarity colors --- */
+
 /* UR: Ultra Rare - rainbow-ish gold glow */
 .rarity-ur .badge {
   background: linear-gradient(90deg,#ffd6a5,#ffb4a2 40%,#fbc1ff 70%);
   color: #2b1f00;
   box-shadow: 0 18px 48px rgba(255,182,85,0.18), 0 8px 28px rgba(124,58,237,0.06);
 }
-.rarity-ur .badge .icon { background: rgba(255,255,255,0.18); color: #2b1f00; }
+.rarity-ur .badge .icon {
+  background: rgba(255,255,255,0.18);
+  color: #2b1f00;
+}
 
-/* SSR: Gold (existing) */
+/* SSR: Gold */
 .rarity-ssr .badge {
   background: linear-gradient(90deg,#ffd700,#ffb84d);
   color: #2b1f00;
@@ -166,25 +158,34 @@ img {
   color: #042a2b;
   box-shadow: 0 14px 36px rgba(14,165,233,0.10);
 }
-.rarity-sr .badge .icon { background: rgba(255,255,255,0.06); }
+.rarity-sr .badge .icon {
+  background: rgba(255,255,255,0.06);
+}
 
-/* Rare: Purple (existing-ish) */
+/* Rare: Purple */
 .rarity-rare .badge {
   background: linear-gradient(90deg,#a78bfa,#7c3aed);
   color: #fff;
   box-shadow: 0 14px 36px rgba(124,58,237,0.12);
 }
 
-/* Common: grey (existing) */
+/* Common: grey */
 .rarity-common .badge {
   background: linear-gradient(90deg,#6b7280,#374151);
   color: #fff;
   box-shadow: 0 8px 22px rgba(0,0,0,0.35);
 }
 
-
-/* responsive tweak */
+/* Responsive tweak */
 @media (max-width: 420px) {
-  .rarity-label .badge { padding: 10px 14px; font-size: 16px; gap:8px; }
-  .rarity-label .badge .icon { width:28px; height:28px; font-size:12px; }
+  .rarity-label .badge {
+    padding: 10px 14px;
+    font-size: 16px;
+    gap: 8px;
+  }
+  .rarity-label .badge .icon {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+  }
 }
