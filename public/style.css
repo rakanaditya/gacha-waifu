@@ -65,3 +65,28 @@ img {
   font-size: 12px;
   color: #bdbdbd;
 }
+
+/* Rarity label */
+.rarity-label {
+  position: relative;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 999px;
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 16px;
+  letter-spacing: 0.6px;
+  transform: translateY(0);
+  transition: transform 200ms ease, opacity 250ms ease;
+  opacity: 1;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+}
+
+/* Colors */
+.rarity-ssr { background: linear-gradient(90deg,#ffd700,#ffb84d); color: #2b1f00; }
+.rarity-rare { background: linear-gradient(90deg,#a78bfa,#7c3aed); color: white; }
+.rarity-common { background: linear-gradient(90deg,#6b7280,#374151); color: white; }
+
+/* Small entrance animation */
+.rarity-label.hidden { opacity: 0; transform: translateY(-10px) scale(0.98); }
+
