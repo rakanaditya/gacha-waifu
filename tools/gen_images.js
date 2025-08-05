@@ -1,13 +1,13 @@
-// tools/gen_images.js
 const fs = require('fs');
 const path = require('path');
 
-// Lokasi file input & output
 const inputFile = path.join(__dirname, 'waifu_links.txt');
 const outputFile = path.join(__dirname, '../public/images.json');
 
-// Baca file txt
-const lines = fs.readFileSync(inputFile, 'utf8').split('\n').map(l => l.trim()).filter(Boolean);
+const lines = fs.readFileSync(inputFile, 'utf8')
+  .split('\n')
+  .map(l => l.trim())
+  .filter(Boolean);
 
 const waifus = lines.map((line, i) => {
   const [url, percentStr] = line.split(',').map(v => v.trim());
@@ -15,11 +15,10 @@ const waifus = lines.map((line, i) => {
 
   return {
     name: `Waifu ${i + 1}`,
-    url: url,
-    percent: percent
+    url,
+    percent
   };
 });
 
-// Simpan ke JSON
 fs.writeFileSync(outputFile, JSON.stringify(waifus, null, 2));
-console.log(`✅ Berhasil membuat ${outputFile} dengan ${waifus.length} waifu`);
+console.log(`✅ Berhasil membuat images.json dengan ${waifus.length} waifu`);
