@@ -227,32 +227,56 @@ function getRarityLabel(percent) {
 function showRarityLabel(rarityObj) {
   // create or reuse label element
   let label = document.getElementById('rarity-label');
+  const resultDiv = document.getElementById('result');
+
   if (!label) {
     label = document.createElement('div');
     label.id = 'rarity-label';
-    label.className = 'rarity-label hidden';
-    const resultDiv = document.getElementById('result');
-    // insert at the top of resultDiv
+    label.className = 'rarity-label';
+    // place at top of result area and center
+    label.style.display = 'flex';
+    label.style.flexDirection = 'column';
+    label.style.alignItems = 'center';
+    label.style.justifyContent = 'center';
     resultDiv.insertBefore(label, resultDiv.firstChild);
   }
-  // set text & class
-  label.textContent = rarityObj.text;
-  label.className = `rarity-label hidden rarity-${rarityObj.key}`;
 
-  // trigger entrance
+  // Build badge HTML (icon + text). Icon uses first letter of rarity for style.
+  const txt = rarityObj.text || 'Common';
+  const key = rarityObj.key || 'common';
+  const iconText = key === 'ssr' ? '★' : (key === 'rare' ? '✦' : '•');
+
+  label.className = `rarity-label rarity-${key}`;
+  label.innerHTML = `
+    <div class="badge hidden">
+      <span class="icon">${iconText}</span>
+      <span class="text">${txt}</span>
+    </div>
+    <span class="subtitle small">${key.toUpperCase()}</span>
+  `;
+
+  // Force reflow then animate in (show -> settled)
   requestAnimationFrame(() => {
-    label.classList.remove('hidden');
+    label.classList.add('show');
+    // after entrance, settle to normal scale
+    setTimeout(() => {
+      const badgeEl = label.querySelector('.badge');
+      if (badgeEl) badgeEl.classList.add('settled');
+    }, 420);
   });
 
-  // auto-hide after 1.4s
+  // auto-hide after 1.6s
   setTimeout(() => {
-    label.classList.add('hidden');
-    // remove after transition (safe)
+    // animate out
+    label.classList.remove('show');
+    label.classList.add('hide');
+    // remove after transition
     setTimeout(() => {
       if (label && label.parentElement) label.remove();
-    }, 300);
-  }, 1400);
+    }, 360);
+  }, 1600);
 }
+
 
 /* -------------------- Roll logic (memanggil confetti + sound + label) -------------------- */
 async function rollGacha() {
