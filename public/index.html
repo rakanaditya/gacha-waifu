@@ -77,7 +77,7 @@
 
     async function loadData() {
       try {
-        const res = await fetch('images.json');
+        const res = await fetch('/images.json'); // ambil dari public/images.json
         if (!res.ok) throw new Error('Gagal mengambil data waifu');
         waifus = await res.json();
 
