@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Waifu Gacha</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #121212;
+      color: white;
+      text-align: center;
+      margin: 0;
+      padding: 0;
+    }
+    header {
+      padding: 20px;
+      font-size: 24px;
+      font-weight: bold;
+    }
+    button {
+      background: #ff4d6d;
+      color: white;
+      padding: 10px 20px;
+      font-size: 18px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 20px;
+    }
+    button:hover {
+      background: #ff1e50;
+    }
+    #result {
+      margin-top: 30px;
+    }
+    img {
+      max-width: 300px;
+      border-radius: 10px;
+      box-shadow: 0 0 15px rgba(255,255,255,0.3);
+    }
+    .rate-list {
+      margin-top: 20px;
+      max-width: 500px;
+      margin-left: auto;
+      margin-right: auto;
+      text-align: left;
+    }
+    .rate-item {
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      padding: 5px 0;
+    }
+  </style>
+</head>
+<body>
+  <header>🎲 Waifu Gacha 🎲</header>
+  <button id="rollBtn">Roll Gacha</button>
+  
+  <div id="result"></div>
+
+  <div class="rate-list" id="rateList"></div>
+
+  <script>
+    let waifus = [];
+
+    // Fungsi hitung persen drop rate
+    function calcRates(items) {
+      const sum = items.reduce((a, b) => a + (b.weight || 0), 0);
+      return items.map(w => sum ? (w.weight / sum * 100) : 0);
+    }
+
+    // Fungsi ambil waifu acak sesuai weight
+    function pickWeighted(items) {
+      const total = items.reduce((a, b) => a + (b.weight || 0), 0);
+      const rand = Math.random() * total;
+      let acc = 0;
+      for (const item of items) {
+        acc += item.weight || 0;
+        if (rand <= acc) return item;
+      }
+      return items[items.length - 1];
+    }
+
+    async function loadData() {
+      const res = await fetch('public/images.json');
+      waifus = await res.json();
+      const rates = calcRates(waifus);
+      const list = document.getElementById("rateList");
+      list.innerHTML = waifus.map((w, i) => 
+        `<div class="rate-item"><span>${w.name}</span><span>${rates[i].toFixed(2)}%</span></div>`
+      ).join('');
+    }
+
+    document.getElementById("rollBtn").addEventListener("click", () => {
+      if (!waifus.length) return alert("Data waifu belum dimuat!");
+      const picked = pickWeighted(waifus);
+      document.getElementById("result").innerHTML = `
+        <h2>${picked.name}</h2>
+        <img src="${picked.url}" alt="${picked.name}"/>
+      `;
+    });
+
+    loadData();
+  </script>
+</body>
+</html>
