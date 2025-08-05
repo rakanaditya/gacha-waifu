@@ -1,30 +1,25 @@
 // tools/gen_images.js
-const fs = require("fs");
-const path = require("path");
+const fs = require('fs');
+const path = require('path');
 
-const linksFile = path.join(__dirname, "..", "waifu_links.txt");
-if (!fs.existsSync(linksFile)) {
-  console.error("❌ File waifu_links.txt tidak ditemukan!");
-  process.exit(1);
-}
+// Lokasi file input & output
+const inputFile = path.join(__dirname, 'waifu_links.txt');
+const outputFile = path.join(__dirname, '../public/images.json');
 
-const urls = fs.readFileSync(linksFile, "utf-8")
-  .split("\n")
-  .map(line => line.trim())
-  .filter(Boolean);
+// Baca file txt
+const lines = fs.readFileSync(inputFile, 'utf8').split('\n').map(l => l.trim()).filter(Boolean);
 
-const waifus = urls.map((url, index) => ({
-  name: `Waifu ${index + 1}`,
-  url,
-  weight: 1 // bisa ubah manual nanti
-}));
+const waifus = lines.map((line, i) => {
+  const [url, percentStr] = line.split(',').map(v => v.trim());
+  const percent = parseFloat(percentStr) || 0;
 
-const publicDir = path.join(__dirname, "..", "public");
-if (!fs.existsSync(publicDir)) fs.mkdirSync(publicDir);
+  return {
+    name: `Waifu ${i + 1}`,
+    url: url,
+    percent: percent
+  };
+});
 
-fs.writeFileSync(
-  path.join(publicDir, "images.json"),
-  JSON.stringify(waifus, null, 2)
-);
-
-console.log(`✅ Berhasil membuat images.json (${waifus.length} waifu)`);
+// Simpan ke JSON
+fs.writeFileSync(outputFile, JSON.stringify(waifus, null, 2));
+console.log(`✅ Berhasil membuat ${outputFile} dengan ${waifus.length} waifu`);
