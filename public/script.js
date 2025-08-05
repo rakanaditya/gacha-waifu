@@ -1,11 +1,11 @@
 let waifus = [];
 let isRolling = false;
 
+// Pilih item berdasarkan persen
 function pickByPercent(items) {
   const totalPercent = items.reduce((sum, item) => sum + (Number(item.percent) || 0), 0);
-  if (totalPercent <= 0) {
-    return items[Math.floor(Math.random() * items.length)];
-  }
+  if (totalPercent <= 0) return items[Math.floor(Math.random() * items.length)];
+
   const rand = Math.random() * totalPercent;
   let acc = 0;
   for (const item of items) {
@@ -15,6 +15,37 @@ function pickByPercent(items) {
   return items[items.length - 1];
 }
 
+// Escape HTML
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, m => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[m]));
+}
+
+// Buat elemen gambar
+function createImageElement(src, alt) {
+  const img = document.createElement('img');
+  img.src = src;
+  img.alt = alt;
+  img.loading = 'lazy';
+  img.width = 300;
+  img.onerror = () => {
+    img.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><rect width="100%" height="100%" fill="#222"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#bbb" font-size="16">Gagal memuat gambar</text></svg>`
+    );
+  };
+  return img;
+}
+
+// Preload semua gambar
+function preloadImages(urls) {
+  urls.forEach(url => {
+    const img = new Image();
+    img.src = url;
+  });
+}
+
+// Ambil data
 async function loadData() {
   try {
     const res = await fetch('/images.json', { cache: "no-store" });
@@ -26,6 +57,9 @@ async function loadData() {
       url: w.url || '',
       percent: Number(w.percent) || 0
     }));
+
+    // Preload semua gambar
+    preloadImages(waifus.map(w => w.url));
 
     const list = document.getElementById("rateList");
     const total = waifus.reduce((s, w) => s + w.percent, 0);
@@ -42,30 +76,7 @@ async function loadData() {
   }
 }
 
-function escapeHtml(str) {
-  return String(str).replace(/[&<>"']/g, m => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;'
-  }[m]));
-}
-
-function createImageElement(src, alt) {
-  const img = document.createElement('img');
-  img.src = src;
-  img.alt = alt;
-  img.loading = 'lazy';
-  img.width = 300;
-  img.onerror = () => {
-    img.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(
-      `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><rect width="100%" height="100%" fill="#222"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#bbb" font-size="16">Gagal memuat gambar</text></svg>`
-    );
-  };
-  return img;
-}
-
+// Roll Gacha
 async function rollGacha() {
   if (isRolling) return;
   if (!waifus.length) return alert("Data waifu belum dimuat!");
