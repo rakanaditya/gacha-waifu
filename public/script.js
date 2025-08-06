@@ -391,7 +391,7 @@ function initGoogleStub(){
 
       // Initialize once (harus dipanggil sekali)
       google.accounts.id.initialize({
-        client_id: "PASTE_CLIENT_ID_KAMU_DI_SINI",
+        client_id: "547444245162-lll41k89tlimcjpbqvha0psrmf66arqu.apps.googleusercontent.com",
         callback: handleCredentialResponse
       });
 
