@@ -17,8 +17,9 @@
       </ul>
     </div>
     <div class="nav-right">
-      <!-- Tombol Google Sign-In -->
+      <img id="googleAvatar" src="" alt="" style="width:34px;height:34px;border-radius:50%;display:none;margin-right:8px;" />
       <button id="googleSignBtn" class="ghost">Login (Google)</button>
+      <button id="googleLogoutBtn" class="ghost" style="display:none;margin-left:8px;">Logout</button>
     </div>
   </nav>
 
@@ -47,53 +48,21 @@
       <h2>About</h2>
       <p>
         Gacha Waifu — demo ringan gacha dengan statistik lokal, rarity label, confetti, dan sistem
-        komentar/rating. Dibuat oleh <strong>Rakan Aditya</strong>.
+        rating sederhana. Dibuat oleh <strong>Rakan Aditya</strong>.
       </p>
       <h3>Fitur</h3>
       <ul>
         <li>Gacha berdasarkan bobot di <code>public/images.json</code></li>
         <li>Normalized view (tampilan persentase riil)</li>
         <li>Stats &amp; pity disimpan di <code>localStorage</code></li>
-        <li>Komentar &amp; rating (1–5) disimpan lokal; bisa dikoneksikan ke server jika perlu.</li>
+        <li>Support Google Login (opsional)</li>
       </ul>
-      <h3>Google Login </h3>
+      <h3>Google Login</h3>
       <p class="small">
         Untuk mengaktifkan Google Sign-In, dapatkan <em>Client ID</em> dari Google Cloud Console
-        dan ubah logic pada <code>script.js</code> (ada stub). Tanpa itu, komentar bisa dikirim
-        anonim via localStorage.
+        dan ubah logic pada <code>script.js</code> (ada stub).
       </p>
     </section>
-
-    <!-- COMMENTS & RATINGS -->
-    <aside class="comments-panel">
-      <h3>Komentar &amp; Rating</h3>
-      <form id="commentForm" class="comment-form" aria-label="Form komentar">
-        <div class="form-row">
-          <label for="nameInput">Nama (opsional)</label>
-          <input id="nameInput" placeholder="Anonim" />
-        </div>
-        <div class="form-row">
-          <label for="ratingInput">Rating</label>
-          <div id="ratingInput" class="star-input" role="radiogroup" aria-label="Rating bintang">
-            <button type="button" class="star" data-value="1" aria-label="1 bintang">☆</button>
-            <button type="button" class="star" data-value="2" aria-label="2 bintang">☆</button>
-            <button type="button" class="star" data-value="3" aria-label="3 bintang">☆</button>
-            <button type="button" class="star" data-value="4" aria-label="4 bintang">☆</button>
-            <button type="button" class="star" data-value="5" aria-label="5 bintang">☆</button>
-          </div>
-        </div>
-        <div class="form-row">
-          <label for="commentInput">Komentar</label>
-          <textarea id="commentInput" rows="3" placeholder="Tulis komentarmu..."></textarea>
-        </div>
-        <div class="form-row form-actions">
-          <label class="small"><input id="anonChk" type="checkbox" checked /> Kirim anonim</label>
-          <button id="sendComment" type="button">Kirim</button>
-        </div>
-      </form>
-
-      <div class="comments-list" id="commentsList" aria-live="polite"></div>
-    </aside>
   </main>
 
   <footer class="footer">
