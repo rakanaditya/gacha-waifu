@@ -362,43 +362,69 @@ function initNav(){
   });
 }
 
-/* -------------------- Optional Google Sign-In stub -------------------- */
+/* -------------------- Safe Google Sign-In integration (replace initGoogleStub) -------------------- */
 function initGoogleStub(){
   const btn = document.getElementById('googleSignBtn');
   if (!btn) return;
 
+  // Jika user sudah login sebelumnya, muat data tapi jangan paksa alert (UI non-blocking)
+  try {
+    const savedUser = localStorage.getItem("googleUser");
+    if (savedUser) {
+      const userData = JSON.parse(savedUser);
+      console.log("User sudah login sebelumnya:", userData);
+      // contoh: update UI jika kamu punya elemen profil, jangan gunakan alert di load
+      const profileEl = document.getElementById('googleProfileName');
+      if (profileEl) profileEl.textContent = `Hi, ${userData.name}`;
+    }
+  } catch(e){
+    console.warn('Gagal membaca googleUser dari localStorage', e);
+  }
 
-// --- Cek user yang sudah login sebelumnya ---
-const savedUser = localStorage.getItem("googleUser");
-if (savedUser) {
-  const userData = JSON.parse(savedUser);
-  console.log("User sudah login sebelumnya:", userData);
+  // Bind klik dengan safe guard: cek apakah Google Identity sudah tersedia
+  btn.addEventListener('click', async () => {
+    try {
+      if (!window.google || !google.accounts || !google.accounts.id) {
+        alert('Google Identity Services belum tersedia. Pastikan <script src="https://accounts.google.com/gsi/client"></script> ada di HTML dan sudah termuat.');
+        return;
+      }
 
-  // Contoh: langsung sapa user
-  alert(`Selamat datang kembali, ${userData.name}!`);
-}
+      // Initialize once (harus dipanggil sekali)
+      google.accounts.id.initialize({
+        client_id: "PASTE_CLIENT_ID_KAMU_DI_SINI",
+        callback: handleCredentialResponse
+      });
 
-  btn.addEventListener('click', () => {
-  google.accounts.id.initialize({
-    client_id: "PASTE_CLIENT_ID_KAMU_DI_SINI",
-    callback: handleCredentialResponse
+      // Tampilkan prompt
+      google.accounts.id.prompt();
+    } catch (err) {
+      console.error('GSI error:', err);
+      alert('Terjadi kesalahan saat memulai Google Sign-In. Lihat console untuk detail.');
+    }
   });
-  google.accounts.id.prompt(); // tampilkan popup sign-in
-});
-
-function handleCredentialResponse(response) {
-  // JWT token dari Google
-  console.log("Encoded JWT ID token: " + response.credential);
-
-  // ✅ Dekode token untuk dapat nama/email
-  const payload = JSON.parse(atob(response.credential.split('.')[1]));
-  console.log(payload);
-
-  // ✅ Simpan data ke localStorage
-  localStorage.setItem("googleUser", JSON.stringify(payload));
-
-  alert(`Halo ${payload.name}, kamu login pakai Google!`);
 }
+
+// Handler tetap seperti ini:
+function handleCredentialResponse(response) {
+  if (!response || !response.credential) {
+    console.warn('No credential in response', response);
+    return;
+  }
+  try {
+    const payload = JSON.parse(atob(response.credential.split('.')[1]));
+    console.log('Google payload', payload);
+    // Simpan profil (public) ke localStorage
+    localStorage.setItem("googleUser", JSON.stringify(payload));
+    // Update UI contoh
+    const profileEl = document.getElementById('googleProfileName');
+    if (profileEl) profileEl.textContent = `Hi, ${payload.name}`;
+    // tampilan singkat
+    alert(`Halo ${payload.name}, kamu login pakai Google!`);
+  } catch (e) {
+    console.error('GSI decode error', e);
+  }
+}
+
 
 
 
