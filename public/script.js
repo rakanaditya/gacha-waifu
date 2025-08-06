@@ -1,17 +1,27 @@
-// public/script.js (SPA + gacha + rating localStorage)
+// public/script.js (SPA + gacha + rating localStorage + pity)
 // NOTE: GANTI GOOGLE_CLIENT_ID dengan milikmu jika belum.
-
 const GOOGLE_CLIENT_ID = "547444245162-lll41k89tlimcjpbqvha0psrmf66arqu.apps.googleusercontent.com";
 
 let waifus = [];
 let isRolling = false;
 
 /* -------------------- localStorage keys -------------------- */
-const OBS_KEY = 'gacha_observed_v1';
+const OBS_KEY = 'gacha_observed_v1'; // now stores { counts:[], total:0, pity:[] }
 const LAST_KEY = 'gacha_last_v1';
 const GOOGLE_USER_KEY = 'google_user_v1';
 
-/* -------------------- Simple pickByPercent -------------------- */
+/* -------------------- Pity config -------------------- */
+const PITY_STEP = 0.6;       // percent added per failed roll (base)
+const PITY_MAX_BONUS = 50;   // absolute cap in percent
+
+function computePityMultiplier(basePercent) {
+  if (basePercent <= 0.2) return 6;   // UR
+  if (basePercent <= 1)   return 4;   // SSR
+  if (basePercent <= 3)   return 2;   // SR
+  return 1;                           // common
+}
+
+/* -------------------- Simple pickByPercent (legacy) -------------------- */
 function pickByPercent(items) {
   const totalPercent = items.reduce((sum, item) => sum + (Number(item.percent) || 0), 0);
   if (totalPercent <= 0) return items[Math.floor(Math.random() * items.length)];
@@ -24,7 +34,30 @@ function pickByPercent(items) {
   return items[items.length - 1];
 }
 
-/* -------------------- confetti & pop -------------------- */
+/* -------------------- pick with pity -------------------- */
+function pickByPercentWithPity(items, pityArr) {
+  // build effective percents with pity bonus (absolute add, capped)
+  const adjusted = items.map((it, idx) => {
+    const base = Number(it.percent) || 0;
+    const mult = computePityMultiplier(base);
+    const bonus = (Number(pityArr && pityArr[idx] || 0) ) * PITY_STEP * mult;
+    const effective = Math.min(base + bonus, base + PITY_MAX_BONUS);
+    return { ...it, effectivePercent: effective, originalIndex: idx };
+  });
+
+  const totalEffective = adjusted.reduce((s, a) => s + a.effectivePercent, 0);
+  if (totalEffective <= 0) return items[Math.floor(Math.random() * items.length)];
+
+  const rand = Math.random() * totalEffective;
+  let acc = 0;
+  for (const a of adjusted) {
+    acc += a.effectivePercent;
+    if (rand <= acc) return a;
+  }
+  return adjusted[adjusted.length - 1];
+}
+
+/* -------------------- confetti & pop (unchanged) -------------------- */
 function launchConfetti(count = 60) {
   const canvasId = 'confetti-canvas';
   let canvas = document.getElementById(canvasId);
@@ -136,7 +169,7 @@ async function loadData(){
 }
 function preloadImages(urls){ urls.forEach(u=>{ if (!u) return; const i=new Image(); i.src=u; }); }
 
-/* -------------------- Build rate list UI (with normalize toggle) -------------------- */
+/* -------------------- Build rate list UI (with normalize toggle + pity) -------------------- */
 let normalizedCache = null;
 function buildRateList(){
   const total = waifus.reduce((s,w)=>s+(Number(w.percent)||0),0);
@@ -154,7 +187,7 @@ function buildRateList(){
         <div class="rate-item">
           <div>
             <strong>${escapeHtml(w.name)}</strong>
-            <div class="small">Observed: <span id="observed-${idx}">0.00%</span> • Count: <span id="count-${idx}">0</span></div>
+            <div class="small">Observed: <span id="observed-${idx}">0.00%</span> • Count: <span id="count-${idx}">0</span> • Pity: <span id="pity-${idx}">0.00%</span></div>
           </div>
           <div style="text-align:right;">
             <div id="displayPct-${idx}">${Number(w.percent).toFixed(2)}%</div>
@@ -179,42 +212,64 @@ function buildRateList(){
   refreshObservedFromStorage();
 }
 
-/* -------------------- Observed counters (simple localStorage) -------------------- */
+/* -------------------- Observed counters (localStorage includes pity) -------------------- */
 function loadObserved(){
   try {
     const raw = localStorage.getItem(OBS_KEY);
-    return raw ? JSON.parse(raw) : { counts: [], total:0 };
-  } catch(e){ return { counts:[], total:0 }; }
+    if (!raw) return { counts: [], total: 0, pity: [] };
+    const parsed = JSON.parse(raw);
+    // ensure structure
+    return {
+      counts: Array.isArray(parsed.counts) ? parsed.counts : [],
+      total: Number(parsed.total) || 0,
+      pity: Array.isArray(parsed.pity) ? parsed.pity : []
+    };
+  } catch(e){ return { counts:[], total:0, pity:[] }; }
 }
 function saveObserved(obj){ localStorage.setItem(OBS_KEY, JSON.stringify(obj)); }
+
 function refreshObservedFromStorage(){
   const obs = loadObserved();
   if (!waifus.length) return;
-  if (!Array.isArray(obs.counts) || obs.counts.length !== waifus.length){
-    obs.counts = new Array(waifus.length).fill(0);
-    obs.total = 0;
-    saveObserved(obs);
-  }
+  // normalize counts/pity length
+  if (!Array.isArray(obs.counts) || obs.counts.length !== waifus.length) obs.counts = new Array(waifus.length).fill(0);
+  if (!Array.isArray(obs.pity)   || obs.pity.length !== waifus.length)   obs.pity   = new Array(waifus.length).fill(0);
+  if (!obs.total) obs.total = obs.counts.reduce((s,v)=>s+(Number(v)||0),0);
+
+  // save back normalized structure (for future runs)
+  saveObserved(obs);
+
   waifus.forEach((w,idx)=>{
     const countEl = document.getElementById(`count-${idx}`);
     const obsEl = document.getElementById(`observed-${idx}`);
-    if (countEl) countEl.textContent = String(obs.counts[idx]||0);
+    const pityEl = document.getElementById(`pity-${idx}`);
+    if (countEl) countEl.textContent = String(obs.counts[idx] || 0);
     if (obsEl) {
-      const pct = obs.total>0 ? (100 * (obs.counts[idx]||0) / obs.total) : 0;
+      const pct = obs.total > 0 ? (100 * (obs.counts[idx] || 0) / obs.total) : 0;
       obsEl.textContent = `${pct.toFixed(2)}%`;
     }
+    if (pityEl) {
+      const base = Number(w.percent) || 0;
+      const bonus = Math.min((obs.pity[idx] || 0) * PITY_STEP * computePityMultiplier(base), PITY_MAX_BONUS);
+      pityEl.textContent = `${bonus.toFixed(2)}%`;
+    }
   });
+
   const totalEl = document.getElementById('totalPercent');
   if (totalEl) {
     const totalDefined = waifus.reduce((s,w)=>s+(Number(w.percent)||0),0);
     totalEl.textContent = `Total percent: ${totalDefined.toFixed(2)}% • Rolls: ${obs.total||0}`;
   }
 }
-function incrementObserved(idx){
+
+function incrementObservedAndPity(pickedIdx){
   const obs = loadObserved();
   if (!Array.isArray(obs.counts) || obs.counts.length !== waifus.length) obs.counts = new Array(waifus.length).fill(0);
-  obs.counts[idx] = (obs.counts[idx]||0) + 1;
-  obs.total = (obs.total||0) + 1;
+  if (!Array.isArray(obs.pity)   || obs.pity.length !== waifus.length)   obs.pity   = new Array(waifus.length).fill(0);
+  obs.counts[pickedIdx] = (obs.counts[pickedIdx] || 0) + 1;
+  // reset pity for picked, increment for others
+  obs.pity = obs.pity.map((v, idx) => idx === pickedIdx ? 0 : (Number(v||0) + 1));
+  obs.total = (Number(obs.total) || 0) + 1;
   saveObserved(obs);
   refreshObservedFromStorage();
 }
@@ -235,12 +290,12 @@ function showLastPickIfAny(){
   resultDiv.appendChild(createImageElement(last.url, last.name));
 }
 
-/* -------------------- Gacha roll logic -------------------- */
+/* -------------------- Gacha roll logic (uses pity) -------------------- */
 async function rollGacha(){
   if (isRolling) return;
   if (!waifus.length) { alert('Data waifu belum dimuat!'); return; }
   isRolling = true;
-  const btn = document.getElementById('rollBtn'); 
+  const btn = document.getElementById('rollBtn');
   if (btn) btn.disabled = true;
   const resultDiv = document.getElementById('result');
   if (!resultDiv) { if (btn) btn.disabled = false; isRolling = false; return; }
@@ -249,7 +304,7 @@ async function rollGacha(){
   try {
     const spin = 10;
     for (let i=0;i<spin;i++){
-      const r = pickByPercent(waifus);
+      const r = pickByPercent(waifus); // quick visual spin uses base weights for variety
       resultDiv.innerHTML = `<h3 class="small">🎲 ...</h3>`;
       const img = createImageElement(r.url, r.name);
       resultDiv.appendChild(img);
@@ -259,25 +314,35 @@ async function rollGacha(){
       img.style.transform = 'scale(1)';
     }
 
-    const picked = pickByPercent(waifus);
-    resultDiv.innerHTML = `<h2>${escapeHtml(picked.name)}</h2>`;
-    resultDiv.appendChild(createImageElement(picked.url, picked.name));
+    // load pity array
+    const obs = loadObserved();
+    if (!Array.isArray(obs.pity) || obs.pity.length !== waifus.length) obs.pity = new Array(waifus.length).fill(0);
 
-    // rarity classes
+    // pick using pity-adjusted percents
+    const pickedItem = pickByPercentWithPity(waifus, obs.pity);
+    // pickedItem may be an adjusted object — find original index
+    const pickedIdx = ('originalIndex' in pickedItem) ? pickedItem.originalIndex : waifus.findIndex(w => w.url === pickedItem.url);
+
+    // show final
+    resultDiv.innerHTML = `<h2>${escapeHtml(pickedItem.name)}</h2>`;
+    resultDiv.appendChild(createImageElement(pickedItem.url, pickedItem.name));
+
+    // rarity classes for visual
     const rarityClasses = ['rarity-ur','rarity-ssr','rarity-sr','rarity-rare','rarity-common'];
     resultDiv.classList.remove(...rarityClasses);
-    if (picked.percent <= 0.5) resultDiv.classList.add('rarity-ur');
-    else if (picked.percent <= 1) resultDiv.classList.add('rarity-ssr');
-    else if (picked.percent <= 5) resultDiv.classList.add('rarity-sr');
-    else if (picked.percent <= 15) resultDiv.classList.add('rarity-rare');
+    const pickedBasePercent = Number((waifus[pickedIdx] && waifus[pickedIdx].percent) || 0);
+    if (pickedBasePercent <= 0.5) resultDiv.classList.add('rarity-ur');
+    else if (pickedBasePercent <= 1) resultDiv.classList.add('rarity-ssr');
+    else if (pickedBasePercent <= 5) resultDiv.classList.add('rarity-sr');
+    else if (pickedBasePercent <= 15) resultDiv.classList.add('rarity-rare');
     else resultDiv.classList.add('rarity-common');
 
     try { playPopSound(); } catch(e){}
-    launchConfetti(picked.percent <= 1 ? 220 : (picked.percent <= 5 ? 120 : 60));
+    launchConfetti(pickedBasePercent <= 1 ? 220 : (pickedBasePercent <= 5 ? 120 : 60));
 
-    const idx = waifus.findIndex(w=>w.url === picked.url);
-    if (idx >= 0) incrementObserved(idx);
-    saveLastPick({ name: picked.name, url: picked.url, ts: Date.now(), percent: picked.percent });
+    // update observed + pity
+    if (pickedIdx >= 0) incrementObservedAndPity(pickedIdx);
+    saveLastPick({ name: pickedItem.name, url: pickedItem.url, ts: Date.now(), percent: pickedBasePercent });
   } catch (err) {
     console.error('Error in rollGacha:', err);
     if (resultDiv) resultDiv.innerHTML = `<div class="meta">Terjadi kesalahan saat rolling. Cek console.</div>`;
@@ -403,7 +468,6 @@ function resetObserved(){
 /* -------------------- Init on DOM ready -------------------- */
 document.addEventListener('DOMContentLoaded', ()=>{
   initNav();
-  // komentar dihapus -> tidak memanggil initCommentForm()
   initGoogleStub();
 
   const rollBtn = document.getElementById('rollBtn');
