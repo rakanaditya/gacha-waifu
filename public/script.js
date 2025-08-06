@@ -23,11 +23,10 @@ function computePityMultiplier(basePercent) {
 
 /* -------------------- pick with pity -------------------- */
 function pickByPercentWithPity(items, pityArr) {
-  // build effective percents with pity bonus (absolute add, capped)
   const adjusted = items.map((it, idx) => {
     const base = Number(it.percent) || 0;
     const mult = computePityMultiplier(base);
-    const bonus = (Number(pityArr && pityArr[idx] || 0) ) * PITY_STEP * mult;
+    const bonus = (Number(pityArr && pityArr[idx] || 0)) * PITY_STEP * mult;
     const effective = Math.min(base + bonus, base + PITY_MAX_BONUS);
     return { ...it, effectivePercent: effective, originalIndex: idx };
   });
@@ -44,7 +43,7 @@ function pickByPercentWithPity(items, pityArr) {
   return adjusted[adjusted.length - 1];
 }
 
-/* -------------------- confetti & pop (unchanged) -------------------- */
+/* -------------------- confetti & pop (unchanged, robust) -------------------- */
 function launchConfetti(count = 60) {
   const canvasId = 'confetti-canvas';
   let canvas = document.getElementById(canvasId);
@@ -133,7 +132,10 @@ function playPopSound() {
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 function createImageElement(src, alt){
   const img = document.createElement('img');
-  img.src = src; img.alt = alt; img.loading='lazy'; img.width=300;
+  img.src = src || '';
+  img.alt = alt || '';
+  img.loading='lazy';
+  img.width=300;
   img.onerror = ()=> img.src = 'data:image/svg+xml;utf8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><rect width="100%" height="100%" fill="#222"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#bbb" font-size="16">Gagal memuat gambar</text></svg>');
   return img;
 }
@@ -166,7 +168,7 @@ function buildRateList(){
   list.innerHTML = `
     <div class="meta" id="totalPercent">Total percent: ${total.toFixed(2)}%</div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-      <button id="normalizeBtn" class="ghost">Toggle Normalize View</button>
+      <button id="normalizeBtn" class="ghost" data-showing="0">Toggle Normalize View</button>
       <div class="small">(Normalized = peluang aktual berdasarkan total bobot)</div>
     </div>
     <div id="rateRows">
@@ -275,7 +277,6 @@ function showLastPickIfAny(){
 /* -------------------- Rarity label helper -------------------- */
 function getRarityLabel(percent) {
   if (isNaN(percent)) return { key: 'common', text: 'Common' };
-  // thresholds (adjust if you like)
   const thresholds = { ur: 0.5, ssr: 1, sr: 5, rare: 15 };
   if (percent <= thresholds.ur) return { key: 'ur', text: 'UR' };
   if (percent <= thresholds.ssr) return { key: 'ssr', text: 'SSR' };
@@ -288,11 +289,9 @@ function showRarityLabel(rarityObj) {
   const resultDiv = document.getElementById('result');
   if (!resultDiv) return;
 
-  // remove previous label if present
   const prev = document.getElementById('rarity-label');
   if (prev) prev.remove();
 
-  // create label
   const label = document.createElement('div');
   label.id = 'rarity-label';
   label.className = `rarity-label rarity-${rarityObj.key} show`;
@@ -306,9 +305,7 @@ function showRarityLabel(rarityObj) {
     <span class="subtitle small">${rarityObj.key.toUpperCase()}</span>
   `;
 
-  // insert at top of result box
   resultDiv.insertBefore(label, resultDiv.firstChild);
-  // add settle class to complete animation
   setTimeout(()=> label.classList.add('settled'), 420);
 }
 
@@ -326,7 +323,7 @@ async function rollGacha(){
   try {
     const spin = 10;
     for (let i=0;i<spin;i++){
-      // quick visual spin uses base weights for variety
+      // quick visual spin using simple random picks
       const r = waifus[Math.floor(Math.random()*waifus.length)];
       resultDiv.innerHTML = `<h3 class="small">🎲 ...</h3>`;
       const img = createImageElement(r.url, r.name);
@@ -394,6 +391,8 @@ function initNav(){
 }
 
 /* -------------------- Google Sign-In integration (avatar + logout) -------------------- */
+let gsiInitialized = false;
+
 function updateGoogleButtonUI(userPayload) {
   const btn = document.getElementById('googleSignBtn');
   const logoutBtn = document.getElementById('googleLogoutBtn');
@@ -412,7 +411,8 @@ function updateGoogleButtonUI(userPayload) {
     avatar.style.display = 'none';
     logoutBtn.style.display = 'none';
     btn.dataset.loggedIn = '0';
-    btn.onclick = null;
+    // attach click to initiate sign-in flow
+    btn.onclick = () => startGoogleSignIn();
   }
 }
 
@@ -426,6 +426,48 @@ document.addEventListener('click', (e) => {
     if (anonEl) anonEl.checked = true;
   }
 });
+
+function startGoogleSignIn(){
+  const btn = document.getElementById('googleSignBtn');
+  if (!btn) return;
+  if (!window.google || !google.accounts || !google.accounts.id) {
+    alert('Google Identity Services belum tersedia. Pastikan <script src="https://accounts.google.com/gsi/client" async defer></script> sudah ada di HTML.');
+    return;
+  }
+  try {
+    if (!gsiInitialized) {
+      google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleCredentialResponse
+      });
+      gsiInitialized = true;
+    }
+    // show One-tap / prompt
+    google.accounts.id.prompt();
+  } catch (err) {
+    console.error('GSI init error', err);
+    alert('Gagal memulai Google Sign-In. Periksa console.');
+  }
+}
+
+function handleCredentialResponse(response) {
+  if (!response || !response.credential) {
+    console.warn('No credential received', response);
+    return;
+  }
+  try {
+    const payload = JSON.parse(atob(response.credential.split('.')[1]));
+    localStorage.setItem(GOOGLE_USER_KEY, JSON.stringify(payload));
+    updateGoogleButtonUI(payload);
+    const nameEl = document.getElementById('nameInput');
+    const anonEl = document.getElementById('anonChk');
+    if (nameEl && payload.name) nameEl.value = payload.name;
+    if (anonEl) anonEl.checked = false;
+    console.log('Google user:', payload);
+  } catch (e) {
+    console.error('Failed decoding Google credential', e);
+  }
+}
 
 function initGoogleStub(){
   const btn = document.getElementById('googleSignBtn');
@@ -447,43 +489,13 @@ function initGoogleStub(){
     console.warn('Failed reading google user from storage', e);
   }
 
-  btn.addEventListener('click', () => {
-    if (btn.dataset.loggedIn === '1') return;
-
-    if (!window.google || !google.accounts || !google.accounts.id) {
-      alert('Google Identity Services belum tersedia. Pastikan <script src="https://accounts.google.com/gsi/client" async defer></script> sudah ada di HTML.');
-      return;
-    }
-
-    try {
-      google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: handleCredentialResponse
-      });
-      google.accounts.id.prompt();
-    } catch (err) {
-      console.error('GSI init error', err);
-      alert('Gagal memulai Google Sign-In. Periksa console.');
-    }
-  });
-}
-
-function handleCredentialResponse(response) {
-  if (!response || !response.credential) {
-    console.warn('No credential received', response);
-    return;
-  }
-  try {
-    const payload = JSON.parse(atob(response.credential.split('.')[1]));
-    localStorage.setItem(GOOGLE_USER_KEY, JSON.stringify(payload));
-    updateGoogleButtonUI(payload);
-    const nameEl = document.getElementById('nameInput');
-    const anonEl = document.getElementById('anonChk');
-    if (nameEl && payload.name) nameEl.value = payload.name;
-    if (anonEl) anonEl.checked = false;
-    console.log('Google user:', payload);
-  } catch (e) {
-    console.error('Failed decoding Google credential', e);
+  // attach click handler if not logged in
+  const btnEl = document.getElementById('googleSignBtn');
+  if (btnEl) {
+    btnEl.addEventListener('click', (ev)=>{
+      if (btnEl.dataset.loggedIn === '1') return;
+      startGoogleSignIn();
+    });
   }
 }
 
