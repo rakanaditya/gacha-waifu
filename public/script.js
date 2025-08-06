@@ -366,10 +366,41 @@ function initNav(){
 function initGoogleStub(){
   const btn = document.getElementById('googleSignBtn');
   if (!btn) return;
-  btn.addEventListener('click', ()=>{
-    alert('Google Sign-In belum dikonfigurasi. Untuk mengaktifkan, dapatkan Client ID di Google Cloud Console dan implementasikan OAuth di script.js (ada stub).');
-  });
+
+
+// --- Cek user yang sudah login sebelumnya ---
+const savedUser = localStorage.getItem("googleUser");
+if (savedUser) {
+  const userData = JSON.parse(savedUser);
+  console.log("User sudah login sebelumnya:", userData);
+
+  // Contoh: langsung sapa user
+  alert(`Selamat datang kembali, ${userData.name}!`);
 }
+
+  btn.addEventListener('click', () => {
+  google.accounts.id.initialize({
+    client_id: "PASTE_CLIENT_ID_KAMU_DI_SINI",
+    callback: handleCredentialResponse
+  });
+  google.accounts.id.prompt(); // tampilkan popup sign-in
+});
+
+function handleCredentialResponse(response) {
+  // JWT token dari Google
+  console.log("Encoded JWT ID token: " + response.credential);
+
+  // ✅ Dekode token untuk dapat nama/email
+  const payload = JSON.parse(atob(response.credential.split('.')[1]));
+  console.log(payload);
+
+  // ✅ Simpan data ke localStorage
+  localStorage.setItem("googleUser", JSON.stringify(payload));
+
+  alert(`Halo ${payload.name}, kamu login pakai Google!`);
+}
+
+
 
 /* -------------------- optional reset helpers (if you add buttons in HTML) -------------------- */
 function resetObserved(){
