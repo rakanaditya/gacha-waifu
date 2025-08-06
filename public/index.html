@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <!-- NAVIGATION -->
   <nav class="nav">
     <div class="nav-left">
       <div class="brand">🎲 Gacha Waifu</div>
@@ -16,7 +17,7 @@
       </ul>
     </div>
     <div class="nav-right">
-      <!-- Optional Google sign-in: placeholder -->
+      <!-- Tombol Google Sign-In -->
       <button id="googleSignBtn" class="ghost">Login (Google)</button>
     </div>
   </nav>
@@ -55,7 +56,7 @@
         <li>Stats &amp; pity disimpan di <code>localStorage</code></li>
         <li>Komentar &amp; rating (1–5) disimpan lokal; bisa dikoneksikan ke server jika perlu.</li>
       </ul>
-      <h3>Google Login (opsional)</h3>
+      <h3>Google Login </h3>
       <p class="small">
         Untuk mengaktifkan Google Sign-In, dapatkan <em>Client ID</em> dari Google Cloud Console
         dan ubah logic pada <code>script.js</code> (ada stub). Tanpa itu, komentar bisa dikirim
@@ -63,7 +64,7 @@
       </p>
     </section>
 
-    <!-- COMMENTS & RATINGS (shared) -->
+    <!-- COMMENTS & RATINGS -->
     <aside class="comments-panel">
       <h3>Komentar &amp; Rating</h3>
       <form id="commentForm" class="comment-form" aria-label="Form komentar">
@@ -99,6 +100,10 @@
     <div>© 2025 Gacha Waifu by Rakan Aditya</div>
   </footer>
 
+  <!-- Google Sign-In API -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  
+  <!-- Script utama -->
   <script src="script.js"></script>
 </body>
 </html>
