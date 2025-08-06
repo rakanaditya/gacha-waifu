@@ -1,4 +1,4 @@
-// public/script.js (SPA + gacha + rating localStorage + pity)
+// public/script.js (SPA + gacha + rating localStorage + pity + rarity label)
 // NOTE: GANTI GOOGLE_CLIENT_ID dengan milikmu jika belum.
 const GOOGLE_CLIENT_ID = "547444245162-lll41k89tlimcjpbqvha0psrmf66arqu.apps.googleusercontent.com";
 
@@ -6,7 +6,7 @@ let waifus = [];
 let isRolling = false;
 
 /* -------------------- localStorage keys -------------------- */
-const OBS_KEY = 'gacha_observed_v1'; // now stores { counts:[], total:0, pity:[] }
+const OBS_KEY = 'gacha_observed_v1'; // stores { counts:[], total:0, pity:[] }
 const LAST_KEY = 'gacha_last_v1';
 const GOOGLE_USER_KEY = 'google_user_v1';
 
@@ -19,19 +19,6 @@ function computePityMultiplier(basePercent) {
   if (basePercent <= 1)   return 4;   // SSR
   if (basePercent <= 3)   return 2;   // SR
   return 1;                           // common
-}
-
-/* -------------------- Simple pickByPercent (legacy) -------------------- */
-function pickByPercent(items) {
-  const totalPercent = items.reduce((sum, item) => sum + (Number(item.percent) || 0), 0);
-  if (totalPercent <= 0) return items[Math.floor(Math.random() * items.length)];
-  const rand = Math.random() * totalPercent;
-  let acc = 0;
-  for (const item of items) {
-    acc += Number(item.percent) || 0;
-    if (rand <= acc) return item;
-  }
-  return items[items.length - 1];
 }
 
 /* -------------------- pick with pity -------------------- */
@@ -218,7 +205,6 @@ function loadObserved(){
     const raw = localStorage.getItem(OBS_KEY);
     if (!raw) return { counts: [], total: 0, pity: [] };
     const parsed = JSON.parse(raw);
-    // ensure structure
     return {
       counts: Array.isArray(parsed.counts) ? parsed.counts : [],
       total: Number(parsed.total) || 0,
@@ -231,12 +217,9 @@ function saveObserved(obj){ localStorage.setItem(OBS_KEY, JSON.stringify(obj)); 
 function refreshObservedFromStorage(){
   const obs = loadObserved();
   if (!waifus.length) return;
-  // normalize counts/pity length
   if (!Array.isArray(obs.counts) || obs.counts.length !== waifus.length) obs.counts = new Array(waifus.length).fill(0);
   if (!Array.isArray(obs.pity)   || obs.pity.length !== waifus.length)   obs.pity   = new Array(waifus.length).fill(0);
   if (!obs.total) obs.total = obs.counts.reduce((s,v)=>s+(Number(v)||0),0);
-
-  // save back normalized structure (for future runs)
   saveObserved(obs);
 
   waifus.forEach((w,idx)=>{
@@ -267,7 +250,6 @@ function incrementObservedAndPity(pickedIdx){
   if (!Array.isArray(obs.counts) || obs.counts.length !== waifus.length) obs.counts = new Array(waifus.length).fill(0);
   if (!Array.isArray(obs.pity)   || obs.pity.length !== waifus.length)   obs.pity   = new Array(waifus.length).fill(0);
   obs.counts[pickedIdx] = (obs.counts[pickedIdx] || 0) + 1;
-  // reset pity for picked, increment for others
   obs.pity = obs.pity.map((v, idx) => idx === pickedIdx ? 0 : (Number(v||0) + 1));
   obs.total = (Number(obs.total) || 0) + 1;
   saveObserved(obs);
@@ -290,6 +272,46 @@ function showLastPickIfAny(){
   resultDiv.appendChild(createImageElement(last.url, last.name));
 }
 
+/* -------------------- Rarity label helper -------------------- */
+function getRarityLabel(percent) {
+  if (isNaN(percent)) return { key: 'common', text: 'Common' };
+  // thresholds (adjust if you like)
+  const thresholds = { ur: 0.5, ssr: 1, sr: 5, rare: 15 };
+  if (percent <= thresholds.ur) return { key: 'ur', text: 'UR' };
+  if (percent <= thresholds.ssr) return { key: 'ssr', text: 'SSR' };
+  if (percent <= thresholds.sr) return { key: 'sr', text: 'SR' };
+  if (percent <= thresholds.rare) return { key: 'rare', text: 'Rare' };
+  return { key: 'common', text: 'Common' };
+}
+
+function showRarityLabel(rarityObj) {
+  const resultDiv = document.getElementById('result');
+  if (!resultDiv) return;
+
+  // remove previous label if present
+  const prev = document.getElementById('rarity-label');
+  if (prev) prev.remove();
+
+  // create label
+  const label = document.createElement('div');
+  label.id = 'rarity-label';
+  label.className = `rarity-label rarity-${rarityObj.key} show`;
+
+  const iconText = rarityObj.key === 'ssr' ? '★' : (rarityObj.key === 'rare' ? '✦' : (rarityObj.key === 'ur' ? '☆' : '•'));
+  label.innerHTML = `
+    <div class="badge">
+      <span class="icon">${iconText}</span>
+      <span class="text">${escapeHtml(rarityObj.text)}</span>
+    </div>
+    <span class="subtitle small">${rarityObj.key.toUpperCase()}</span>
+  `;
+
+  // insert at top of result box
+  resultDiv.insertBefore(label, resultDiv.firstChild);
+  // add settle class to complete animation
+  setTimeout(()=> label.classList.add('settled'), 420);
+}
+
 /* -------------------- Gacha roll logic (uses pity) -------------------- */
 async function rollGacha(){
   if (isRolling) return;
@@ -304,7 +326,8 @@ async function rollGacha(){
   try {
     const spin = 10;
     for (let i=0;i<spin;i++){
-      const r = pickByPercent(waifus); // quick visual spin uses base weights for variety
+      // quick visual spin uses base weights for variety
+      const r = waifus[Math.floor(Math.random()*waifus.length)];
       resultDiv.innerHTML = `<h3 class="small">🎲 ...</h3>`;
       const img = createImageElement(r.url, r.name);
       resultDiv.appendChild(img);
@@ -320,17 +343,20 @@ async function rollGacha(){
 
     // pick using pity-adjusted percents
     const pickedItem = pickByPercentWithPity(waifus, obs.pity);
-    // pickedItem may be an adjusted object — find original index
     const pickedIdx = ('originalIndex' in pickedItem) ? pickedItem.originalIndex : waifus.findIndex(w => w.url === pickedItem.url);
+    const pickedBasePercent = Number((waifus[pickedIdx] && waifus[pickedIdx].percent) || 0);
 
     // show final
     resultDiv.innerHTML = `<h2>${escapeHtml(pickedItem.name)}</h2>`;
     resultDiv.appendChild(createImageElement(pickedItem.url, pickedItem.name));
 
+    // show rarity label
+    const rarity = getRarityLabel(pickedBasePercent);
+    showRarityLabel(rarity);
+
     // rarity classes for visual
     const rarityClasses = ['rarity-ur','rarity-ssr','rarity-sr','rarity-rare','rarity-common'];
     resultDiv.classList.remove(...rarityClasses);
-    const pickedBasePercent = Number((waifus[pickedIdx] && waifus[pickedIdx].percent) || 0);
     if (pickedBasePercent <= 0.5) resultDiv.classList.add('rarity-ur');
     else if (pickedBasePercent <= 1) resultDiv.classList.add('rarity-ssr');
     else if (pickedBasePercent <= 5) resultDiv.classList.add('rarity-sr');
@@ -343,6 +369,7 @@ async function rollGacha(){
     // update observed + pity
     if (pickedIdx >= 0) incrementObservedAndPity(pickedIdx);
     saveLastPick({ name: pickedItem.name, url: pickedItem.url, ts: Date.now(), percent: pickedBasePercent });
+
   } catch (err) {
     console.error('Error in rollGacha:', err);
     if (resultDiv) resultDiv.innerHTML = `<div class="meta">Terjadi kesalahan saat rolling. Cek console.</div>`;
