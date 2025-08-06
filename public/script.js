@@ -1,15 +1,17 @@
-// public/script.js (SPA + gacha + comments & rating localStorage)
-// NOTE: jika kamu punya confetti/sound lebih lengkap, replace launchConfetti() & playPopSound() dengan versi lama.
+// public/script.js (SPA + gacha + rating localStorage)
+// NOTE: GANTI GOOGLE_CLIENT_ID dengan milikmu jika belum.
+
+const GOOGLE_CLIENT_ID = "547444245162-lll41k89tlimcjpbqvha0psrmf66arqu.apps.googleusercontent.com";
 
 let waifus = [];
 let isRolling = false;
 
 /* -------------------- localStorage keys -------------------- */
-const COMMENTS_KEY = 'gacha_comments_v1';
 const OBS_KEY = 'gacha_observed_v1';
 const LAST_KEY = 'gacha_last_v1';
+const GOOGLE_USER_KEY = 'google_user_v1';
 
-/* -------------------- Simple pickByPercent (no pity in this file) -------------------- */
+/* -------------------- Simple pickByPercent -------------------- */
 function pickByPercent(items) {
   const totalPercent = items.reduce((sum, item) => sum + (Number(item.percent) || 0), 0);
   if (totalPercent <= 0) return items[Math.floor(Math.random() * items.length)];
@@ -22,7 +24,7 @@ function pickByPercent(items) {
   return items[items.length - 1];
 }
 
-/* -------------------- minimal confetti & pop (replace if you have better) -------------------- */
+/* -------------------- confetti & pop -------------------- */
 function launchConfetti(count = 60) {
   const canvasId = 'confetti-canvas';
   let canvas = document.getElementById(canvasId);
@@ -35,7 +37,6 @@ function launchConfetti(count = 60) {
     created = true;
   }
   const ctx = canvas.getContext('2d');
-  // handle pixel ratio and dynamic sizing
   function setSize() {
     const dpr = window.devicePixelRatio || 1;
     canvas.width = Math.floor(window.innerWidth * dpr);
@@ -77,7 +78,6 @@ function launchConfetti(count = 60) {
     if (dt < 2600) rafId = requestAnimationFrame(draw);
     else {
       ctx.clearRect(0,0,canvas.width,canvas.height);
-      // cleanup
       window.removeEventListener('resize', onResize);
       if (created && canvas && canvas.parentNode) {
         setTimeout(()=>{ try{ canvas.parentNode.removeChild(canvas); }catch(e){} }, 200);
@@ -105,7 +105,6 @@ function playPopSound() {
     g.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.006);
     g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
     o.stop(ctx.currentTime + 0.18);
-    // close context shortly after to free resources
     setTimeout(()=>{ try{ ctx.close(); }catch(e){} }, 400);
   } catch (e){ /* ignore */ }
 }
@@ -128,7 +127,6 @@ async function loadData(){
     waifus = waifus.map((w,i)=>({ name: w.name || `Waifu ${i+1}`, url: w.url||'', percent: Number(w.percent)||0 }));
     preloadImages(waifus.map(w=>w.url));
     buildRateList();
-    // after building rate list, also show last pick if any
     showLastPickIfAny();
   } catch (err){
     console.error(err);
@@ -178,66 +176,7 @@ function buildRateList(){
       btn.textContent = showing ? 'Toggle Normalize View' : 'Show Raw Percents';
     });
   }
-  // refresh observed if stored
   refreshObservedFromStorage();
-}
-
-/* -------------------- Comments & rating (localStorage) -------------------- */
-function loadComments(){
-  try {
-    const raw = localStorage.getItem(COMMENTS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch(e){ return []; }
-}
-function saveComments(arr){ localStorage.setItem(COMMENTS_KEY, JSON.stringify(arr)); }
-function renderComments(){
-  const list = document.getElementById('commentsList');
-  if (!list) return;
-  const items = loadComments();
-  if (!items.length) { list.innerHTML = `<div class="small">Belum ada komentar — jadi yang pertama!</div>`; return; }
-  list.innerHTML = items.slice().reverse().map(it=>`
-    <div class="comment-item">
-      <div class="comment-meta">
-        <div><strong>${escapeHtml(it.name||'Anonim')}</strong> • ${'★'.repeat(it.rating)}${'☆'.repeat(5-it.rating)}</div>
-        <div class="small">${new Date(it.ts).toLocaleString()}</div>
-      </div>
-      <div class="comment-body">${escapeHtml(it.text)}</div>
-    </div>
-  `).join('');
-}
-
-/* handle comment form */
-function initCommentForm(){
-  const stars = Array.from(document.querySelectorAll('#ratingInput .star'));
-  let rating = 5;
-  function setStar(v){
-    rating = v;
-    stars.forEach(s=> s.classList.toggle('active', Number(s.dataset.value) <= v) );
-  }
-  stars.forEach(s=>{
-    s.addEventListener('click', ()=> setStar(Number(s.dataset.value)) );
-  });
-  setStar(5);
-
-  const sendBtn = document.getElementById('sendComment');
-  if (sendBtn) {
-    sendBtn.addEventListener('click', ()=>{
-      const nameEl = document.getElementById('nameInput');
-      const commentEl = document.getElementById('commentInput');
-      const anonEl = document.getElementById('anonChk');
-      const name = nameEl ? nameEl.value.trim() : '';
-      const text = commentEl ? commentEl.value.trim() : '';
-      const anon = anonEl ? anonEl.checked : false;
-      if (!text) { alert('Tulis komentar dulu.'); return; }
-      const entry = { name: anon ? '' : (name || 'Anonim'), text, rating, ts: Date.now() };
-      const arr = loadComments();
-      arr.push(entry);
-      saveComments(arr);
-      if (commentEl) commentEl.value = '';
-      renderComments();
-    });
-  }
-  renderComments();
 }
 
 /* -------------------- Observed counters (simple localStorage) -------------------- */
@@ -296,7 +235,7 @@ function showLastPickIfAny(){
   resultDiv.appendChild(createImageElement(last.url, last.name));
 }
 
-/* -------------------- Gacha roll logic (visuals + increment observed) -------------------- */
+/* -------------------- Gacha roll logic -------------------- */
 async function rollGacha(){
   if (isRolling) return;
   if (!waifus.length) { alert('Data waifu belum dimuat!'); return; }
@@ -307,46 +246,46 @@ async function rollGacha(){
   if (!resultDiv) { if (btn) btn.disabled = false; isRolling = false; return; }
   resultDiv.innerHTML = `<h2>🎰 Rolling...</h2>`;
 
-  // animasi preview
-  const spin = 10;
-  for (let i=0;i<spin;i++){
-    const r = pickByPercent(waifus);
-    resultDiv.innerHTML = `<h3 class="small">🎲 ...</h3>`;
-    const img = createImageElement(r.url, r.name);
-    resultDiv.appendChild(img);
+  try {
+    const spin = 10;
+    for (let i=0;i<spin;i++){
+      const r = pickByPercent(waifus);
+      resultDiv.innerHTML = `<h3 class="small">🎲 ...</h3>`;
+      const img = createImageElement(r.url, r.name);
+      resultDiv.appendChild(img);
+      try { playPopSound(); } catch(e){}
+      img.style.transform = 'scale(0.96)';
+      await new Promise(rp=>setTimeout(rp, 50 + i*25));
+      img.style.transform = 'scale(1)';
+    }
+
+    const picked = pickByPercent(waifus);
+    resultDiv.innerHTML = `<h2>${escapeHtml(picked.name)}</h2>`;
+    resultDiv.appendChild(createImageElement(picked.url, picked.name));
+
+    // rarity classes
+    const rarityClasses = ['rarity-ur','rarity-ssr','rarity-sr','rarity-rare','rarity-common'];
+    resultDiv.classList.remove(...rarityClasses);
+    if (picked.percent <= 0.5) resultDiv.classList.add('rarity-ur');
+    else if (picked.percent <= 1) resultDiv.classList.add('rarity-ssr');
+    else if (picked.percent <= 5) resultDiv.classList.add('rarity-sr');
+    else if (picked.percent <= 15) resultDiv.classList.add('rarity-rare');
+    else resultDiv.classList.add('rarity-common');
+
     try { playPopSound(); } catch(e){}
-    img.style.transform = 'scale(0.96)';
-    await new Promise(rp=>setTimeout(rp, 50 + i*25));
-    img.style.transform = 'scale(1)';
+    launchConfetti(picked.percent <= 1 ? 220 : (picked.percent <= 5 ? 120 : 60));
+
+    const idx = waifus.findIndex(w=>w.url === picked.url);
+    if (idx >= 0) incrementObserved(idx);
+    saveLastPick({ name: picked.name, url: picked.url, ts: Date.now(), percent: picked.percent });
+  } catch (err) {
+    console.error('Error in rollGacha:', err);
+    if (resultDiv) resultDiv.innerHTML = `<div class="meta">Terjadi kesalahan saat rolling. Cek console.</div>`;
+  } finally {
+    if (btn) btn.disabled = false;
+    isRolling = false;
   }
-
-  // hasil final
-  const picked = pickByPercent(waifus);
-  resultDiv.innerHTML = `<h2>${escapeHtml(picked.name)}</h2>`;
-  resultDiv.appendChild(createImageElement(picked.url, picked.name));
-
-  // hapus kelas rarity lama & set yang baru
-  const rarityClasses = ['rarity-ur','rarity-ssr','rarity-sr','rarity-rare','rarity-common'];
-  resultDiv.classList.remove(...rarityClasses);
-  if (picked.percent <= 0.5) resultDiv.classList.add('rarity-ur');
-  else if (picked.percent <= 1) resultDiv.classList.add('rarity-ssr');
-  else if (picked.percent <= 5) resultDiv.classList.add('rarity-sr');
-  else if (picked.percent <= 15) resultDiv.classList.add('rarity-rare');
-  else resultDiv.classList.add('rarity-common');
-
-  // efek suara & confetti
-  try { playPopSound(); } catch(e){}
-  launchConfetti(picked.percent <= 1 ? 220 : (picked.percent <= 5 ? 120 : 60));
-
-  // counter & last pick
-  const idx = waifus.findIndex(w=>w.url === picked.url);
-  if (idx >= 0) incrementObserved(idx);
-  saveLastPick({ name: picked.name, url: picked.url, ts: Date.now(), percent: picked.percent });
-
-  if (btn) btn.disabled = false;
-  isRolling = false;
 }
-
 
 /* -------------------- Router (SPA nav) -------------------- */
 function initNav(){
@@ -362,95 +301,124 @@ function initNav(){
   });
 }
 
-/* -------------------- Safe Google Sign-In integration (replace initGoogleStub) -------------------- */
+/* -------------------- Google Sign-In integration (avatar + logout) -------------------- */
+function updateGoogleButtonUI(userPayload) {
+  const btn = document.getElementById('googleSignBtn');
+  const logoutBtn = document.getElementById('googleLogoutBtn');
+  const avatar = document.getElementById('googleAvatar');
+  if (!btn || !logoutBtn || !avatar) return;
+
+  if (userPayload && (userPayload.name || userPayload.email)) {
+    btn.textContent = userPayload.name || userPayload.email;
+    avatar.src = userPayload.picture || '';
+    avatar.style.display = userPayload.picture ? 'inline-block' : 'none';
+    logoutBtn.style.display = 'inline-block';
+    btn.dataset.loggedIn = '1';
+    btn.onclick = null;
+  } else {
+    btn.textContent = 'Login (Google)';
+    avatar.style.display = 'none';
+    logoutBtn.style.display = 'none';
+    btn.dataset.loggedIn = '0';
+    btn.onclick = null;
+  }
+}
+
+document.addEventListener('click', (e) => {
+  if (e.target && e.target.id === 'googleLogoutBtn') {
+    localStorage.removeItem(GOOGLE_USER_KEY);
+    updateGoogleButtonUI(null);
+    const nameEl = document.getElementById('nameInput');
+    const anonEl = document.getElementById('anonChk');
+    if (nameEl) nameEl.value = '';
+    if (anonEl) anonEl.checked = true;
+  }
+});
+
 function initGoogleStub(){
   const btn = document.getElementById('googleSignBtn');
   if (!btn) return;
 
-  // Jika user sudah login sebelumnya, muat data tapi jangan paksa alert (UI non-blocking)
   try {
-    const savedUser = localStorage.getItem("googleUser");
-    if (savedUser) {
-      const userData = JSON.parse(savedUser);
-      console.log("User sudah login sebelumnya:", userData);
-      // contoh: update UI jika kamu punya elemen profil, jangan gunakan alert di load
-      const profileEl = document.getElementById('googleProfileName');
-      if (profileEl) profileEl.textContent = `Hi, ${userData.name}`;
+    const saved = localStorage.getItem(GOOGLE_USER_KEY);
+    if (saved) {
+      const payload = JSON.parse(saved);
+      updateGoogleButtonUI(payload);
+      const nameEl = document.getElementById('nameInput');
+      const anonEl = document.getElementById('anonChk');
+      if (nameEl && payload.name) nameEl.value = payload.name;
+      if (anonEl) anonEl.checked = false;
+    } else {
+      updateGoogleButtonUI(null);
     }
   } catch(e){
-    console.warn('Gagal membaca googleUser dari localStorage', e);
+    console.warn('Failed reading google user from storage', e);
   }
 
-  // Bind klik dengan safe guard: cek apakah Google Identity sudah tersedia
-  btn.addEventListener('click', async () => {
-    try {
-      if (!window.google || !google.accounts || !google.accounts.id) {
-        alert('Google Identity Services belum tersedia. Pastikan <script src="https://accounts.google.com/gsi/client"></script> ada di HTML dan sudah termuat.');
-        return;
-      }
+  btn.addEventListener('click', () => {
+    if (btn.dataset.loggedIn === '1') return;
 
-      // Initialize once (harus dipanggil sekali)
+    if (!window.google || !google.accounts || !google.accounts.id) {
+      alert('Google Identity Services belum tersedia. Pastikan <script src="https://accounts.google.com/gsi/client" async defer></script> sudah ada di HTML.');
+      return;
+    }
+
+    try {
       google.accounts.id.initialize({
-        client_id: "547444245162-lll41k89tlimcjpbqvha0psrmf66arqu.apps.googleusercontent.com",
+        client_id: GOOGLE_CLIENT_ID,
         callback: handleCredentialResponse
       });
-
-      // Tampilkan prompt
       google.accounts.id.prompt();
     } catch (err) {
-      console.error('GSI error:', err);
-      alert('Terjadi kesalahan saat memulai Google Sign-In. Lihat console untuk detail.');
+      console.error('GSI init error', err);
+      alert('Gagal memulai Google Sign-In. Periksa console.');
     }
   });
 }
 
-// Handler tetap seperti ini:
 function handleCredentialResponse(response) {
   if (!response || !response.credential) {
-    console.warn('No credential in response', response);
+    console.warn('No credential received', response);
     return;
   }
   try {
     const payload = JSON.parse(atob(response.credential.split('.')[1]));
-    console.log('Google payload', payload);
-    // Simpan profil (public) ke localStorage
-    localStorage.setItem("googleUser", JSON.stringify(payload));
-    // Update UI contoh
-    const profileEl = document.getElementById('googleProfileName');
-    if (profileEl) profileEl.textContent = `Hi, ${payload.name}`;
-    // tampilan singkat
-    alert(`Halo ${payload.name}, kamu login pakai Google!`);
+    localStorage.setItem(GOOGLE_USER_KEY, JSON.stringify(payload));
+    updateGoogleButtonUI(payload);
+    const nameEl = document.getElementById('nameInput');
+    const anonEl = document.getElementById('anonChk');
+    if (nameEl && payload.name) nameEl.value = payload.name;
+    if (anonEl) anonEl.checked = false;
+    console.log('Google user:', payload);
   } catch (e) {
-    console.error('GSI decode error', e);
+    console.error('Failed decoding Google credential', e);
   }
 }
 
-
-
-
-/* -------------------- optional reset helpers (if you add buttons in HTML) -------------------- */
+/* -------------------- optional reset helpers -------------------- */
 function resetObserved(){
   try { localStorage.removeItem(OBS_KEY); refreshObservedFromStorage(); } catch(e){}
-}
-function resetComments(){
-  try { localStorage.removeItem(COMMENTS_KEY); renderComments(); } catch(e){}
 }
 
 /* -------------------- Init on DOM ready -------------------- */
 document.addEventListener('DOMContentLoaded', ()=>{
   initNav();
-  initCommentForm();
+  // komentar dihapus -> tidak memanggil initCommentForm()
   initGoogleStub();
 
   const rollBtn = document.getElementById('rollBtn');
   if (rollBtn) rollBtn.addEventListener('click', rollGacha);
   document.addEventListener('keydown', e => { if (e.key.toLowerCase()==='r') rollGacha(); });
 
-  // optional reset buttons
-  const ro = document.getElementById('resetObservedBtn');
-  if (ro) ro.addEventListener('click', ()=> { if(confirm('Reset observed counters?')) resetObserved(); });
-  const rc = document.getElementById('resetCommentsBtn');
-  if (rc) rc.addEventListener('click', ()=> { if(confirm('Reset comments?')) resetComments(); });
+  const ro = document.getElementById('resetStatsLocal');
+  if (ro) ro.addEventListener('click', ()=> {
+    if (!confirm('Reset semua stats lokal?')) return;
+    localStorage.removeItem(OBS_KEY);
+    localStorage.removeItem(LAST_KEY);
+    refreshObservedFromStorage();
+    const resultDiv = document.getElementById('result');
+    if (resultDiv) resultDiv.innerHTML = `<div class="small">Stats direset — klik Roll Gacha untuk mulai lagi</div>`;
+  });
 
   loadData();
 });
