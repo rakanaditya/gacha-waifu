@@ -1,4 +1,3 @@
-/* base from your theme */
 body {
   font-family: Arial, sans-serif;
   background: #121212;
@@ -9,7 +8,6 @@ body {
   -moz-osx-font-smoothing:grayscale;
 }
 
-/* NAV */
 .nav {
   display:flex;
   justify-content:space-between;
@@ -25,7 +23,6 @@ body {
 }
 .nav-btn.active, .nav-btn:hover { background: rgba(255,255,255,0.04); color:#fff; }
 
-/* layout */
 .container {
   max-width:1080px;
   margin: 20px auto;
@@ -35,7 +32,6 @@ body {
   gap: 18px;
 }
 
-/* main page content / result */
 .page { background: transparent; padding: 6px; }
 .hidden { display:none; }
 
@@ -48,37 +44,17 @@ button.ghost { background:transparent; border:1px solid rgba(255,255,255,0.06); 
 button[disabled] { opacity:0.6; cursor:not-allowed; }
 #result { margin-top:6px; min-height:220px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:12px; border-radius:10px; background: rgba(255,255,255,0.02); }
 
-/* rate list */
 .rate-list { margin-top:18px; background: rgba(255,255,255,0.02); border-radius:8px; padding:12px; }
 .rate-item { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.03); }
 .meta { font-size:13px; color:#cfcfcf; margin-bottom:8px; }
 .small { font-size:12px; color:#bdbdbd; }
 
-/* comments aside */
-.comments-panel { background: rgba(255,255,255,0.02); padding:12px; border-radius:8px; }
-.comment-form .form-row { margin-bottom:10px; display:flex; flex-direction:column; gap:6px; }
-.comment-form input, .comment-form textarea { background:#0d0d0d; border:1px solid rgba(255,255,255,0.04); color:#fff; padding:8px; border-radius:6px; }
-.form-actions { display:flex; justify-content:space-between; align-items:center; gap:10px; }
-.star-input { display:inline-flex; gap:6px; }
-.star { background:transparent; border:1px solid rgba(255,255,255,0.04); padding:6px 8px; border-radius:6px; cursor:pointer; color:#f3f3f3; font-size:18px; }
-.star.active { background: #ffd166; color:#2b1f00; border-color: rgba(255,209,102,0.9); }
-
-/* comments list */
-.comments-list { margin-top:12px; max-height:380px; overflow:auto; display:flex; flex-direction:column; gap:8px; }
-.comment-item { background: rgba(255,255,255,0.01); padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.02); }
-.comment-meta { display:flex; gap:8px; align-items:center; justify-content:space-between; margin-bottom:6px; color:#cfcfcf; font-size:13px; }
-.comment-body { color:#e6e6e6; font-size:14px; white-space:pre-wrap; }
-
-/* footer */
 .footer { margin-top:24px; padding:18px; text-align:center; color:#bdbdbd; border-top:1px solid rgba(255,255,255,0.03); }
 
-/* responsive */
 @media (max-width: 920px) {
   .container { grid-template-columns: 1fr; padding:12px; }
 }
 
-
-/* ----- Persistent big rarity badge (fixed under image) ----- */
 .rarity-label {
   position: relative;
   display: flex;
@@ -89,7 +65,6 @@ button[disabled] { opacity:0.6; cursor:not-allowed; }
   margin-top: 10px;
 }
 
-/* Container badge */
 .rarity-label .badge {
   display: inline-flex;
   align-items: center;
@@ -109,7 +84,6 @@ button[disabled] { opacity:0.6; cursor:not-allowed; }
   border: 1px solid rgba(255,255,255,0.06);
 }
 
-/* Icon left */
 .rarity-label .badge .icon {
   width: 34px;
   height: 34px;
@@ -123,20 +97,17 @@ button[disabled] { opacity:0.6; cursor:not-allowed; }
   background: rgba(255,255,255,0.08);
 }
 
-/* Visible state */
 .rarity-label.show .badge {
   opacity: 1;
   transform: perspective(800px) rotateX(0deg) scale(1.06);
   filter: drop-shadow(0 12px 30px rgba(0,0,0,0.55));
 }
 
-/* Settle */
 .rarity-label.settled .badge {
   transform: perspective(800px) rotateX(0deg) scale(1);
   transition: transform 350ms cubic-bezier(.2,.9,.2,1);
 }
 
-/* Subtitle below badge (optional) */
 .rarity-label .subtitle {
   margin-top: 8px;
   font-size: 12px;
@@ -144,9 +115,6 @@ button[disabled] { opacity:0.6; cursor:not-allowed; }
   opacity: 0.9;
 }
 
-/* --- Rarity colors --- */
-
-/* UR: Ultra Rare - rainbow-ish gold glow */
 .rarity-ur .badge {
   background: linear-gradient(90deg,#ffd6a5,#ffb4a2 40%,#fbc1ff 70%);
   color: #2b1f00;
@@ -157,14 +125,12 @@ button[disabled] { opacity:0.6; cursor:not-allowed; }
   color: #2b1f00;
 }
 
-/* SSR: Gold */
 .rarity-ssr .badge {
   background: linear-gradient(90deg,#ffd700,#ffb84d);
   color: #2b1f00;
   box-shadow: 0 16px 40px rgba(255,190,0,0.18);
 }
 
-/* SR: Blue-cyan */
 .rarity-sr .badge {
   background: linear-gradient(90deg,#5eead4,#0ea5e9);
   color: #042a2b;
@@ -174,21 +140,18 @@ button[disabled] { opacity:0.6; cursor:not-allowed; }
   background: rgba(255,255,255,0.06);
 }
 
-/* Rare: Purple */
 .rarity-rare .badge {
   background: linear-gradient(90deg,#a78bfa,#7c3aed);
   color: #fff;
   box-shadow: 0 14px 36px rgba(124,58,237,0.12);
 }
 
-/* Common: grey */
 .rarity-common .badge {
   background: linear-gradient(90deg,#6b7280,#374151);
   color: #fff;
   box-shadow: 0 8px 22px rgba(0,0,0,0.35);
 }
 
-/* Responsive tweak */
 @media (max-width: 420px) {
   .rarity-label .badge {
     padding: 10px 14px;
